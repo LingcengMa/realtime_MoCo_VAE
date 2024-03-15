@@ -27,24 +27,21 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 path = os.path.dirname(os.path.realpath(__file__))
 data_folder = os.path.join(path, 'binning')
-data_file = os.path.join(data_folder, 'realtime_GT_imgs.mat')
-mat = scipy.io.loadmat(data_file)
-Phi_rt_init = mat['Phi_rt_init'] 
+
+if True: #to improve: do this with a flag
+    data_file = os.path.join(data_folder, 'realtime_GT_imgs.mat')
+    mat = scipy.io.loadmat(data_file)
+    Phi_rt_init = mat['Phi_rt_init'] 
+else :
+    data_file = os.path.join(data_folder, 'feature.mat')
+    mat = scipy.io.loadmat(data_file)
+    Phi_rt_init = mat['Phi_rt_feature']
+
 Phi_rt_init_real = Phi_rt_init.real
 Phi_rt_init_imag = Phi_rt_init.imag
 Phi_rt_init_con = np.concatenate((Phi_rt_init_real, Phi_rt_init_imag))
 Phi_rt_init_con = Phi_rt_init_con.transpose()
 Phi_rt_init = torch.from_numpy(Phi_rt_init_con).float().to(device)
-
-#data_feature
-data_file= os.path.join(data_folder, 'feature.mat')
-mat = scipy.io.loadmat(data_file)
-Phi_rt_feature = mat['Phi_rt_feature'] 
-Phi_rt_feature_real = Phi_rt_feature.real
-Phi_rt_feature_imag = Phi_rt_feature.imag
-Phi_rt_feature_con = np.concatenate((Phi_rt_feature_real, Phi_rt_feature_imag))
-Phi_rt_feature_con = Phi_rt_feature_con.transpose()
-Phi_rt_feature = torch.from_numpy(Phi_rt_feature_con).float().to(device)
 
 # print(data_con.shape)
 
@@ -91,8 +88,7 @@ class CustomDataset(Dataset):
 
         return data_sample, t1t2_sample
 
-train_dataset = CustomDataset(Phi_rt_feature, t1t2_normalized)
-train_dataset_init = CustomDataset(Phi_rt_init, t1t2_normalized)
+train_dataset = CustomDataset(Phi_rt_init, t1t2_normalized)
 
 ########### training ###########
 latent_dims = 2
@@ -129,7 +125,7 @@ for epoch in range(max_epochs):
         total = (x**2).sum()
         train_loss += loss.detach().cpu().numpy()
         optimizer.step()
-    train_loss /= Phi_rt_feature.shape[0]
+    train_loss /= Phi_rt_init.shape[0]
     nrmse_ = torch.sqrt(rmse / total)
     NRMSE.append(nrmse_)
     losses.append(train_loss)
@@ -146,7 +142,7 @@ plt.legend()
 
 print("Training complete")
 
-recon_output, latent_space_mu, latent_space_logvar  = model(Phi_rt_feature, t1t2_normalized)
+recon_output, latent_space_mu, latent_space_logvar  = model(Phi_rt_init, t1t2_normalized)
 recon_output = recon_output.to('cpu').detach().numpy()
 np.save('./assets/recon_output_test.npy', recon_output)
 latent_space = model.reparameterize(latent_space_mu,latent_space_logvar)
