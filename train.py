@@ -110,9 +110,10 @@ losses= []
 NRMSE = []
 
 print("training on", device)
-
+total = (Phi_rt_init**2).sum()
 for epoch in range(max_epochs):
     train_loss, nrmse_, start = 0.0, 0.0, time.time()
+    mse = 0
     for idx, (x,t1t2) in tqdm(enumerate(train_dataset),desc=f"Epoch {epoch + 1}/{max_epochs}"):
     # tqdm(train_dataset,desc=f"Epoch {epoch + 1}/{max_epochs}"):
         x, t1t2 = x.to(device), t1t2.to(device)
@@ -122,12 +123,11 @@ for epoch in range(max_epochs):
         optimizer.zero_grad()
         loss = loss_function(recon_x, x, mu, logvar)
         loss.backward()
-        rmse = ((recon_x - x)**2).sum()
-        total = (x**2).sum()
+        mse += ((recon_x - x)**2).sum()
         train_loss += loss.detach().cpu().numpy()
         optimizer.step()
     train_loss /= Phi_rt_init.shape[0]
-    nrmse_ = torch.sqrt(rmse / total)
+    nrmse_ = torch.sqrt(mse / total)
     NRMSE.append(nrmse_)
     losses.append(train_loss)
     print('epoch %d, train loss %.4f , NRMSE %.4f , time %.1f sec'
