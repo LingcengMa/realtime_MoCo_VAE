@@ -139,7 +139,7 @@ plt.xlabel('Epochs')
 plt.ylabel('Loss')
 plt.title('Training Loss Curve')
 plt.legend()
-# plt.savefig(os.path.join('./lossGraphs', 'losses_test.jpg'))
+plt.savefig(os.path.join('./lossGraphs', 'losses_test.jpg'))
 
 print("Training complete")
 
@@ -149,3 +149,25 @@ np.save('./assets/recon_output_test.npy', recon_output)
 latent_space = model.reparameterize(latent_space_mu,latent_space_logvar)
 latent_space = latent_space.to('cpu').detach().numpy()
 np.save('./assets/latent_space_test.npy', latent_space)
+
+# Some plots. These should be in a different file at some point
+fig, axs = plt.subplots(4, 2, figsize=(10, 10))
+axs = axs.flatten()  # Flatten the 2x2 array of axes for easy indexing
+
+for i in range(4):
+    axs[i].plot(Phi_rt_init[:1800, i], label='Phi_rt_init Col ' + str(i + 1))
+    axs[i].plot(recon_output[:1800, i], label='Recon_output Col ' + str(i + 1))
+    axs[i].legend(loc="upper right")
+
+for i in range(2):
+    axs[4+i].plot(latent_space[:1800, i], label='Latent Col ' + str(i + 1))
+    axs[4+i].legend(loc="upper right")
+
+for i in range(2):
+    axs[6+i].plot(t1t2_normalized[:1800, i], label='Known Latent Col ' + str(i + 1))
+    axs[6+i].legend(loc="upper right")
+
+plt.tight_layout()
+plt.show()
+plt.savefig('./plots/4x2_subplots.png')
+print("4x2_subplots.png saved successfully.")
