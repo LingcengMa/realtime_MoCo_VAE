@@ -158,7 +158,7 @@ class CVAE(nn.Module):
         h7 = self.relu(self.fc7(h6))
         h8 = self.relu(self.fc8(h7))
         h9 = self.relu(self.fc9(h8))
-        return self.sigmoid(self.fc10(h9))
+        return self.fc10(h9)
 
     def forward(self, x, c):
         mu, logvar = self.encode(x, c)
@@ -189,7 +189,7 @@ class CVAEtest(nn.Module):
         self.fc10 = nn.Linear(25, feature_size)
 
         self.relu = nn.ReLU()
-        self.sigmoid = nn.Sigmoid()
+        # self.sigmoid = nn.Sigmoid()
 
     def encode(self, x, c): # Q(z|x, c)
         '''
@@ -222,7 +222,7 @@ class CVAEtest(nn.Module):
         h7 = self.relu(self.fc7(h6))
         h8 = self.relu(self.fc8(h7))
         h9 = self.relu(self.fc9(h8))
-        return self.sigmoid(self.fc10(h9))
+        return self.fc10(h9)
 
     def forward(self, x, c):
         mu, logvar = self.encode(x, c)
