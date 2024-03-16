@@ -37,10 +37,10 @@ else :
     mat = scipy.io.loadmat(data_file)
     Phi_rt_init = mat['Phi_rt_feature']
 
+# Phi_rt_init = (Phi_rt_init - Phi_rt_init.mean(axis=1, keepdims=True)) / Phi_rt_init.std(axis=1, keepdims=True) #Normalize each feature
 Phi_rt_init_real = Phi_rt_init.real
 Phi_rt_init_imag = Phi_rt_init.imag
 Phi_rt_init_con = np.concatenate((Phi_rt_init_real, Phi_rt_init_imag))
-# Phi_rt_init_con = (Phi_rt_init_con - Phi_rt_init_con.mean(axis=1, keepdims=True)) / Phi_rt_init_con.std(axis=1, keepdims=True) #Normalize each feature
 Phi_rt_init_con = Phi_rt_init_con.transpose()
 Phi_rt_init = torch.from_numpy(Phi_rt_init_con).float().to(device)
 
