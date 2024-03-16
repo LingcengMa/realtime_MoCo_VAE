@@ -124,22 +124,31 @@ for epoch in range(max_epochs):
         loss = loss_function(recon_x, x, mu, logvar)
         loss.backward()
         mse += ((recon_x - x)**2).sum()
-        train_loss += loss.detach().cpu().numpy()
+        train_loss += loss
         optimizer.step()
     train_loss /= Phi_rt_init.shape[0]
     nrmse_ = torch.sqrt(mse / total)
-    NRMSE.append(nrmse_)
-    losses.append(train_loss)
+    NRMSE.append(nrmse_.detach().numpy())
+    losses.append(train_loss.detach().numpy())
     print('epoch %d, train loss %.4f , NRMSE %.4f , time %.1f sec'
           % (epoch+1, train_loss, nrmse_, time.time() - start))
 
-plt.figure()
-plt.plot(losses, label='Training Loss')
-plt.xlabel('Epochs')
-plt.ylabel('Loss')
-plt.title('Training Loss Curve')
-plt.legend()
-plt.savefig(os.path.join('./lossGraphs', 'losses_test.jpg'))
+# Plot loss functions
+fig, axs = plt.subplots(2, 1, figsize=(10, 10))  # 2 rows, 1 column, optional figure size
+# First subplot for Training Loss
+axs[0].plot(losses, label='Training Loss')
+axs[0].set_xlabel('Epochs')
+axs[0].set_ylabel('Loss')
+axs[0].set_title('Training Loss Curve')
+axs[0].legend()
+# Second subplot for NRMSE
+axs[1].plot(NRMSE, label='NRMSE')
+axs[1].set_xlabel('Epochs')
+axs[1].set_ylabel('NRMSE')
+axs[1].set_title('NRMSE Curve')
+axs[1].legend()
+plt.tight_layout()
+plt.savefig(os.path.join('./lossGraphs', 'losses_test.png'))
 
 print("Training complete")
 
@@ -153,21 +162,15 @@ np.save('./assets/latent_space_test.npy', latent_space)
 # Some plots. These should be in a different file at some point
 fig, axs = plt.subplots(4, 2, figsize=(10, 10))
 axs = axs.flatten()  # Flatten the 2x2 array of axes for easy indexing
-
 for i in range(4):
     axs[i].plot(Phi_rt_init[:1800, i], label='Phi_rt_init Col ' + str(i + 1))
     axs[i].plot(recon_output[:1800, i], label='Recon_output Col ' + str(i + 1))
     axs[i].legend(loc="upper right")
-
 for i in range(2):
     axs[4+i].plot(latent_space[:1800, i], label='Latent Col ' + str(i + 1))
     axs[4+i].legend(loc="upper right")
-
 for i in range(2):
     axs[6+i].plot(t1t2_normalized[:1800, i], label='Known Latent Col ' + str(i + 1))
     axs[6+i].legend(loc="upper right")
-
 plt.tight_layout()
-plt.show()
 plt.savefig('./plots/4x2_subplots.png')
-print("4x2_subplots.png saved successfully.")
