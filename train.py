@@ -119,13 +119,16 @@ for epoch in range(max_epochs):
     loss = loss_function(recon_x, Phi_rt_init, mu, logvar)
     loss.backward()
     optimizer.step()
-    mse = ((recon_x - Phi_rt_init)**2).sum()
-    train_loss = loss.detach().cpu().numpy()/Phi_rt_init.shape[0]
-    nrmse_ = torch.sqrt(mse / total)
-    NRMSE.append(nrmse_.detach().cpu().numpy())
-    losses.append(train_loss)
-    pbar.set_description(f'train_loss: {train_loss:.3e}, NRMSE: {nrmse_:.4f}')
-    pbar.update(1)
+    if epoch % 10 == 9 :
+        train_loss = loss.detach().cpu().numpy()/Phi_rt_init.shape[0]
+        losses.append(train_loss)
+        mu, logvar = model.encode(Phi_rt_init, t1t2_normalized)
+        recon_x = model.decode(mu, t1t2_normalized) #NO REPARAMETERIZATION
+        mse = ((recon_x - Phi_rt_init)**2).sum()
+        nrmse_ = torch.sqrt(mse / total)
+        NRMSE.append(nrmse_.detach().cpu().numpy())
+        pbar.set_description(f'train_loss: {train_loss:.3e}, NRMSE: {nrmse_:.4f}')
+        pbar.update(10)
 pbar.close()
 
 # Plot loss functions
@@ -147,7 +150,8 @@ plt.savefig(os.path.join('./lossGraphs', 'losses_test.png'))
 
 print("Training complete")
 
-recon_output, latent_space_mu, latent_space_logvar  = model(Phi_rt_init, t1t2_normalized)
+latent_space_mu, latent_space_logvar = model.encode(Phi_rt_init, t1t2_normalized)
+recon_output = model.decode(mu, t1t2_normalized) #NO REPARAMETERIZATION
 recon_output = recon_output.to('cpu').detach().numpy()
 np.save('./assets/recon_output_test.npy', recon_output)
 latent_space = model.reparameterize(latent_space_mu,latent_space_logvar)
