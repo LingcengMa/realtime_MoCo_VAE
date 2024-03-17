@@ -19,8 +19,8 @@ import matplotlib.pyplot as plt; plt.rcParams['figure.dpi'] = 200
 from sklearn.feature_selection import mutual_info_regression
 from torch.utils.tensorboard import SummaryWriter
 #Configuration
-device = 'cpu'
-# device = 'cuda' if torch.cuda.is_available() else 'cpu'
+# device = 'cpu'
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 # MI = MutualInformation(num_bins=256, sigma=0.4, normalize=True).to(device)
 
 #data_init
@@ -99,40 +99,34 @@ feature_size = 96
 model = CVAE(feature_size, latent_dims, class_size).to(device)
 max_epochs = 5
 
-optimizer = optim.Adam(model.parameters(), lr=1e-3)
+optimizer = optim.Adam(model.parameters(), lr=1e-2)
 
 def loss_function(recon_x, x, mu, logvar):
     BCE = F.mse_loss(recon_x, x)
     KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
     return BCE + KLD
 
-max_epochs = 1
+max_epochs = 2000
 losses= []
 NRMSE = []
 
 print("training on", device)
 total = (Phi_rt_init**2).sum()
+start = time.time()
 for epoch in range(max_epochs):
-    train_loss, nrmse_, start = 0.0, 0.0, time.time()
-    mse = 0
-    for idx, (x,t1t2) in tqdm(enumerate(train_dataset),desc=f"Epoch {epoch + 1}/{max_epochs}"):
-    # tqdm(train_dataset,desc=f"Epoch {epoch + 1}/{max_epochs}"):
-        x, t1t2 = x.to(device), t1t2.to(device)
-        x = x.unsqueeze(0)
-        t1t2 = t1t2.unsqueeze(0)
-        recon_x, mu, logvar = model(x, t1t2)
-        optimizer.zero_grad()
-        loss = loss_function(recon_x, x, mu, logvar)
-        loss.backward()
-        mse += ((recon_x - x)**2).sum()
-        train_loss += loss
-        optimizer.step()
-    train_loss /= Phi_rt_init.shape[0]
+    recon_x, mu, logvar = model(Phi_rt_init, t1t2_normalized)
+    optimizer.zero_grad()
+    loss = loss_function(recon_x, Phi_rt_init, mu, logvar)
+    loss.backward()
+    mse = ((recon_x - Phi_rt_init)**2).sum()
+    optimizer.step()
+    train_loss = loss.detach().cpu().numpy()/Phi_rt_init.shape[0]
     nrmse_ = torch.sqrt(mse / total)
-    NRMSE.append(nrmse_.detach().numpy())
-    losses.append(train_loss.detach().numpy())
-    print('epoch %d, train loss %.4f , NRMSE %.4f , time %.1f sec'
-          % (epoch+1, train_loss, nrmse_, time.time() - start))
+    NRMSE.append(nrmse_.detach().cpu().numpy())
+    losses.append(train_loss)
+    if epoch == 0 or (epoch % 100) == 99 or epoch == max_epochs-1:
+        print('epoch %d, train loss %.4f , NRMSE %.4f , time %.1f sec'
+            % (epoch+1, train_loss, nrmse_, time.time() - start))
 
 # Plot loss functions
 fig, axs = plt.subplots(2, 1, figsize=(10, 10))  # 2 rows, 1 column, optional figure size
@@ -164,14 +158,14 @@ np.save('./assets/latent_space_test.npy', latent_space)
 fig, axs = plt.subplots(4, 2, figsize=(10, 10))
 axs = axs.flatten()  # Flatten the 2x2 array of axes for easy indexing
 for i in range(4):
-    axs[i].plot(Phi_rt_init[:1800, i], label='Phi_rt_init Col ' + str(i + 1))
+    axs[i].plot(Phi_rt_init[:1800, i].cpu(), label='Phi_rt_init Col ' + str(i + 1))
     axs[i].plot(recon_output[:1800, i], label='Recon_output Col ' + str(i + 1))
     axs[i].legend(loc="upper right")
 for i in range(2):
-    axs[4+i].plot(latent_space[:1800, i], label='Latent Col ' + str(i + 1))
+    axs[4+i].plot(latent_space_mu.detach().cpu().numpy()[:1800,i], label='Latent Col ' + str(i + 1))
     axs[4+i].legend(loc="upper right")
 for i in range(2):
-    axs[6+i].plot(t1t2_normalized[:1800, i], label='Known Latent Col ' + str(i + 1))
+    axs[6+i].plot(t1t2_normalized[:1800, i].cpu(), label='Known Latent Col ' + str(i + 1))
     axs[6+i].legend(loc="upper right")
 plt.tight_layout()
 plt.savefig('./plots/4x2_subplots.png')
