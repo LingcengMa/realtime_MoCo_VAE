@@ -107,6 +107,7 @@ def loss_function(recon_x, x, mu, logvar):
     return BCE + 1e-8*KLD
 
 max_epochs = 10000
+epoch_plot_step = 10
 losses= []
 NRMSE = []
 
@@ -119,7 +120,7 @@ for epoch in range(max_epochs):
     loss = loss_function(recon_x, Phi_rt_init, mu, logvar)
     loss.backward()
     optimizer.step()
-    if epoch % 10 == 9 :
+    if (epoch % epoch_plot_step) == (epoch_plot_step - 1) :
         train_loss = loss.detach().cpu().numpy()/Phi_rt_init.shape[0]
         losses.append(train_loss)
         mu, logvar = model.encode(Phi_rt_init, t1t2_normalized)
@@ -128,19 +129,19 @@ for epoch in range(max_epochs):
         nrmse_ = torch.sqrt(mse / total)
         NRMSE.append(nrmse_.detach().cpu().numpy())
         pbar.set_description(f'train_loss: {train_loss:.3e}, NRMSE: {nrmse_:.4f}')
-        pbar.update(10)
+        pbar.update(epoch_plot_step)
 pbar.close()
 
 # Plot loss functions
 fig, axs = plt.subplots(2, 1, figsize=(10, 10))  # 2 rows, 1 column, optional figure size
 # First subplot for Training Loss
-axs[0].plot(losses, label='Training Loss')
+axs[0].plot((np.arange(len(losses)) +1) * epoch_plot_step, losses, label='Training Loss')
 axs[0].set_xlabel('Epochs')
 axs[0].set_ylabel('Loss')
 axs[0].set_title('Training Loss Curve')
 axs[0].legend()
 # Second subplot for NRMSE
-axs[1].plot(NRMSE, label='NRMSE')
+axs[1].plot((np.arange(len(NRMSE)) + 1) * epoch_plot_step, NRMSE, label='NRMSE')
 axs[1].set_xlabel('Epochs')
 axs[1].set_ylabel('NRMSE')
 axs[1].set_title('NRMSE Curve')
