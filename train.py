@@ -104,9 +104,9 @@ optimizer = optim.Adam(model.parameters(), lr=1e-2)
 def loss_function(recon_x, x, mu, logvar):
     BCE = F.mse_loss(recon_x, x)
     KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-    return BCE + KLD
+    return BCE + 1e-8*KLD
 
-max_epochs = 2000
+max_epochs = 10000
 losses= []
 NRMSE = []
 
