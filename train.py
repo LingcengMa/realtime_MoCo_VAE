@@ -112,21 +112,21 @@ NRMSE = []
 
 print("training on", device)
 total = (Phi_rt_init**2).sum()
-start = time.time()
+pbar = tqdm(total=max_epochs, desc='Initializing')
 for epoch in range(max_epochs):
     recon_x, mu, logvar = model(Phi_rt_init, t1t2_normalized)
     optimizer.zero_grad()
     loss = loss_function(recon_x, Phi_rt_init, mu, logvar)
     loss.backward()
-    mse = ((recon_x - Phi_rt_init)**2).sum()
     optimizer.step()
+    mse = ((recon_x - Phi_rt_init)**2).sum()
     train_loss = loss.detach().cpu().numpy()/Phi_rt_init.shape[0]
     nrmse_ = torch.sqrt(mse / total)
     NRMSE.append(nrmse_.detach().cpu().numpy())
     losses.append(train_loss)
-    if epoch == 0 or (epoch % 100) == 99 or epoch == max_epochs-1:
-        print('epoch %d, train loss %.4f , NRMSE %.4f , time %.1f sec'
-            % (epoch+1, train_loss, nrmse_, time.time() - start))
+    pbar.set_description(f'train_loss: {train_loss:.3e}, NRMSE: {nrmse_:.4f}')
+    pbar.update(1)
+pbar.close()
 
 # Plot loss functions
 fig, axs = plt.subplots(2, 1, figsize=(10, 10))  # 2 rows, 1 column, optional figure size
