@@ -18,6 +18,7 @@ import scipy
 import matplotlib.pyplot as plt; plt.rcParams['figure.dpi'] = 200
 from sklearn.feature_selection import mutual_info_regression
 from torch.utils.tensorboard import SummaryWriter
+writer = SummaryWriter()
 #Configuration
 # device = 'cpu'
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
