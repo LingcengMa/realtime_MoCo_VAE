@@ -29,14 +29,14 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 path = os.path.dirname(os.path.realpath(__file__))
 data_folder = os.path.join(path, 'binning')
 
-if True: #to improve: do this with a flag
+if False: #to improve: do this with a flag
     data_file = os.path.join(data_folder, 'realtime_GT_imgs.mat')
     mat = scipy.io.loadmat(data_file)
     Phi_rt_init = mat['Phi_rt_init'] 
 else :
-    data_file = os.path.join(data_folder, 'feature.mat')
+    data_file = '/home/xfang/Data/Tianle_data/20210604_workspace_small.mat'
     mat = scipy.io.loadmat(data_file)
-    Phi_rt_init = mat['Phi_rt_feature']
+    Phi_rt_init = mat['Phi_rt_init']
 
 Phi_rt_init = Phi_rt_init / Phi_rt_init[:,0].std() #Normalize whole
 # Phi_rt_init = (Phi_rt_init - Phi_rt_init.mean(axis=1, keepdims=True)) / Phi_rt_init.std(axis=1, keepdims=True) #Normalize each feature
@@ -96,7 +96,7 @@ train_dataset = CustomDataset(Phi_rt_init, t1t2_normalized)
 ########### training ###########
 latent_dims = 2
 class_size = 2
-feature_size = 96
+feature_size = 64 #2*Phi_rt_init.size(dim=1)?
 model = CVAE(feature_size, latent_dims, class_size).to(device)
 max_epochs = 5
 
