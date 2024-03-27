@@ -37,6 +37,9 @@ else :
     data_file = '/home/xfang/Data/Tianle_data/20210604_workspace_small.mat'
     mat = scipy.io.loadmat(data_file)
     Phi_rt_init = mat['Phi_rt_init']
+    hidx = mat['Hidx'] # Cardiac
+    ridx = mat['Ridx'] # Respiratory
+    thetas = mat['thetas'] # Thetas
 
 Phi_rt_init = Phi_rt_init / Phi_rt_init[:,0].std() #Normalize whole
 # Phi_rt_init = (Phi_rt_init - Phi_rt_init.mean(axis=1, keepdims=True)) / Phi_rt_init.std(axis=1, keepdims=True) #Normalize each feature
@@ -54,8 +57,8 @@ segidx = segidx['Segidx']
 
 binning_file = os.path.join(data_folder, 'binning_GT.mat')
 binning_file = scipy.io.loadmat(binning_file)
-hidx = binning_file['Hidx'] # Cardiac
-ridx = binning_file['Ridx'] # Respiratory
+# hidx = binning_file['Hidx'] # Cardiac
+# ridx = binning_file['Ridx'] # Respiratory
 
 # create simulated t2 prep signal
 array_1 = np.ones(360)
@@ -74,7 +77,11 @@ ramp_latent_mu = (array-array.mean())/array.std()
 
 ramp_latent_mu = torch.from_numpy(ramp_latent_mu).unsqueeze(1).to(device)
 segidx_mu  = torch.from_numpy(segidx_mu).to(device)
+thetas = torch.from_numpy(thetas.transpose()).to(device)
 t1t2_normalized = torch.cat([segidx_mu,ramp_latent_mu], dim=1).to(torch.float32)
+t1t2theta = torch.cat([segidx_mu, ramp_latent_mu, thetas], dim=1).to(torch.float32)
+print(t1t2theta.shape)
+print(t1t2_normalized.shape)
 
 class CustomDataset(Dataset):
     def __init__(self, data_feature, data_t1t2):
@@ -92,20 +99,20 @@ class CustomDataset(Dataset):
         return data_sample, t1t2_sample
 
 train_dataset = CustomDataset(Phi_rt_init, t1t2_normalized)
+train_dataset_ec = CustomDataset(Phi_rt_init, t1t2theta)
 
 ########### training ###########
 latent_dims = 2
-class_size = 2
-feature_size = 64 #2*Phi_rt_init.size(dim=1)?
+class_size = 3
+feature_size = Phi_rt_init.size()[1]
 model = CVAE(feature_size, latent_dims, class_size).to(device)
-max_epochs = 5
 
 optimizer = optim.Adam(model.parameters(), lr=1e-2)
 
 def loss_function(recon_x, x, mu, logvar):
     BCE = F.mse_loss(recon_x, x)
     KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-    return BCE + 1e-8*KLD
+    return BCE + 1e-9*KLD
 
 max_epochs = 10000
 epoch_plot_step = 10
@@ -116,7 +123,7 @@ print("training on", device)
 total = (Phi_rt_init**2).sum()
 pbar = tqdm(total=max_epochs, desc='Initializing')
 for epoch in range(max_epochs):
-    recon_x, mu, logvar = model(Phi_rt_init, t1t2_normalized)
+    recon_x, mu, logvar = model(Phi_rt_init, t1t2theta)
     optimizer.zero_grad()
     loss = loss_function(recon_x, Phi_rt_init, mu, logvar)
     loss.backward()
@@ -124,8 +131,8 @@ for epoch in range(max_epochs):
     if (epoch % epoch_plot_step) == (epoch_plot_step - 1) :
         train_loss = loss.detach().cpu().numpy()/Phi_rt_init.shape[0]
         losses.append(train_loss)
-        mu, logvar = model.encode(Phi_rt_init, t1t2_normalized)
-        recon_x = model.decode(mu, t1t2_normalized) #NO REPARAMETERIZATION
+        mu, logvar = model.encode(Phi_rt_init, t1t2theta)
+        recon_x = model.decode(mu, t1t2theta) #NO REPARAMETERIZATION
         mse = ((recon_x - Phi_rt_init)**2).sum()
         nrmse_ = torch.sqrt(mse / total)
         NRMSE.append(nrmse_.detach().cpu().numpy())
@@ -152,8 +159,8 @@ plt.savefig(os.path.join('./lossGraphs', 'losses_test.png'))
 
 print("Training complete")
 
-latent_space_mu, latent_space_logvar = model.encode(Phi_rt_init, t1t2_normalized)
-recon_output = model.decode(mu, t1t2_normalized) #NO REPARAMETERIZATION
+latent_space_mu, latent_space_logvar = model.encode(Phi_rt_init, t1t2theta)
+recon_output = model.decode(mu, t1t2theta) #NO REPARAMETERIZATION
 recon_output = recon_output.to('cpu').detach().numpy()
 np.save('./assets/recon_output_test.npy', recon_output)
 latent_space = model.reparameterize(latent_space_mu,latent_space_logvar)
@@ -161,7 +168,7 @@ latent_space = latent_space.to('cpu').detach().numpy()
 np.save('./assets/latent_space_test.npy', latent_space)
 
 # Some plots. These should be in a different file at some point
-fig, axs = plt.subplots(4, 2, figsize=(10, 10))
+fig, axs = plt.subplots(5, 2, figsize=(10, 10))
 axs = axs.flatten()  # Flatten the 2x2 array of axes for easy indexing
 for i in range(4):
     axs[i].plot(Phi_rt_init[:1800, i].cpu(), label='Phi_rt_init Col ' + str(i + 1))
@@ -170,8 +177,18 @@ for i in range(4):
 for i in range(2):
     axs[4+i].plot(latent_space_mu.detach().cpu().numpy()[:1800,i], label='Latent Col ' + str(i + 1))
     axs[4+i].legend(loc="upper right")
-for i in range(2):
-    axs[6+i].plot(t1t2_normalized[:1800, i].cpu(), label='Known Latent Col ' + str(i + 1))
+for i in range(3):
+    axs[6+i].plot(t1t2theta[:1800, i].cpu(), label='Known Latent Col ' + str(i + 1))
     axs[6+i].legend(loc="upper right")
+axs[9].plot(t1t2theta[:360,2].cpu(), label='theta')
 plt.tight_layout()
-plt.savefig('./plots/4x2_subplots.png')
+plt.savefig('./plots/5x2_subplots.png')
+
+# Plot the joint histogram
+plt.figure()
+plt.hist2d(latent_space_mu.detach().cpu().numpy()[:,0], latent_space_mu.detach().cpu().numpy()[:,1], bins=(10, 10), cmap=plt.cm.jet)
+plt.colorbar(label='Counts in Bin')
+plt.xlabel('X')
+plt.ylabel('Y')
+plt.title('Joint Histogram of Two Vectors')
+plt.savefig('./plots/histogram.png')
