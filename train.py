@@ -160,6 +160,8 @@ plt.savefig(os.path.join('./lossGraphs', 'losses_test.png'))
 print("Training complete")
 
 latent_space_mu, latent_space_logvar = model.encode(Phi_rt_init, t1t2theta)
+# with theta = 0
+# without theta
 recon_output = model.decode(mu, t1t2theta) #NO REPARAMETERIZATION
 recon_output = recon_output.to('cpu').detach().numpy()
 np.save('./assets/recon_output_test.npy', recon_output)
