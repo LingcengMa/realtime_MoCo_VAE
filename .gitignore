@@ -1,4 +1,5 @@
 mutualinfo
+*.mat
 *.npy
 *.jpg
 *.jpeg
