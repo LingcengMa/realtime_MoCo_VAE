@@ -6,6 +6,7 @@ import torch.distributions
 import torchvision
 import numpy as np
 import matplotlib.pyplot as plt; plt.rcParams['figure.dpi'] = 200
+import torchaudio
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -165,13 +166,14 @@ class CVAE(nn.Module):
         z = self.reparameterize(mu, logvar)
         return self.decode(z, c), mu, logvar
     
-# input zero to the network as test
-class CVAEtest(nn.Module):
+    
+##### implement bandlimits to the latent space #####
+
+class CVAE_BP(nn.Module):
     def __init__(self, feature_size, latent_dims, class_size):
-        super(CVAEtest, self).__init__()
+        super(CVAE_BP, self).__init__()
         self.feature_size = feature_size
         self.class_size = class_size
-        self.latent_dims = latent_dims
 
         # encode
         self.fc1 = nn.Linear(feature_size + class_size, 25)
@@ -189,7 +191,7 @@ class CVAEtest(nn.Module):
         self.fc10 = nn.Linear(25, feature_size)
 
         self.relu = nn.ReLU()
-        # self.sigmoid = nn.Sigmoid()
+        self.sigmoid = nn.Sigmoid()
 
     def encode(self, x, c): # Q(z|x, c)
         '''
@@ -203,21 +205,48 @@ class CVAEtest(nn.Module):
         h4 = self.relu(self.fc4(h3))
         z_mu = self.fc51(h4)
         z_var = self.fc52(h4)
+        u1 = z_mu[:,0]
+        u2 = z_mu[:,1]
+        u1_fft = torch.fft.fft(u1, dim=-1)
+        u2_fft = torch.fft.fft(u2, dim=-1)
+        u1_filtered = low_pass_filter(u1_fft, 0.67)
+        u2_filtered = model.band_pass_filter(u2_fft, 0.67, 3)
+        mu_filtered[:,0] = model.from_frequency_domain(u1_filtered)
+        mu_filtered[:,1] = model.from_frequency_domain(u2_filtered)
+        
         return z_mu, z_var
 
     def reparameterize(self, mu, logvar):
         std = torch.exp(0.5*logvar)
         eps = torch.randn_like(std)
         return mu + eps*std
+    
+    def to_fft(self, z):
+        # Apply FFT to the latent variables
+        z_fft = torch.fft.fft(z, dim=-1)
+        return z_fft
 
-    def decode(self, c): # P(x|z, c)
+    def from_frequency_domain(self, z_fft):
+        # Apply inverse FFT to convert back to the time domain
+        z = torch.fft.ifft(z_fft, dim=-1)
+        return z.real  # Take the real part, assuming the latent space is real-valued
+    
+    def band_pass_filter(self, z, lower_limit, upper_limit):
+        # Keep only the latent variables within the specified frequency band
+        filtered_z = torch.where((z.real >= lower_limit) & (z.real <= upper_limit), z, torch.zeros_like(z))
+        return filtered_z
+    
+    def low_pass_filter(self, z, upper_limit):
+        # Keep only the latent variables within the specified frequency band
+        filtered_z = torch.where((z.real <= upper_limit), z, torch.zeros_like(z))
+        return filtered_z
+
+    def decode(self, z, c): # P(x|z, c)
         '''
         z: (bs, latent_size)
         c: (bs, class_size)
         '''
-        z_zeros = torch.zeros_like(c[:, :self.latent_dims])
-
-        inputs = torch.cat([z_zeros, c], 1) # (bs, latent_size+class_size)
+        inputs = torch.cat([z, c], 1) # (bs, latent_size+class_size)
         h6 = self.relu(self.fc6(inputs))
         h7 = self.relu(self.fc7(h6))
         h8 = self.relu(self.fc8(h7))
@@ -227,4 +256,6 @@ class CVAEtest(nn.Module):
     def forward(self, x, c):
         mu, logvar = self.encode(x, c)
         z = self.reparameterize(mu, logvar)
-        return self.decode(c), mu, logvar
+        return self.decode(z, c), mu, logvar
+
+

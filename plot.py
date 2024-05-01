@@ -100,11 +100,3 @@ class CustomDataset(Dataset):
 
 train_dataset = CustomDataset(Phi_rt_init, t1t2_normalized)
 train_dataset_ec = CustomDataset(Phi_rt_init, t1t2theta)
-
-# Plot the joint histogram
-plt.hist2d(x, y, bins=(10, 10), cmap=plt.cm.jet)
-plt.colorbar(label='Counts in Bin')
-plt.xlabel('X')
-plt.ylabel('Y')
-plt.title('Joint Histogram of Two Vectors')
-plt.show()
