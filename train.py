@@ -282,17 +282,29 @@ NRMSE = []
 # print("Training complete")
 
 model.load_state_dict(torch.load('CVAEBP_C25Hz.pth'))
+# latent_space_mu, latent_space_logvar = model.encode(Phi_rt_init, t1t2theta)
+# recon_output = model.decode(latent_space_mu, t1t2theta) #NO REPARAMETERIZATION
+# recon_output = recon_output.to('cpu').detach().numpy()
+# np.save('./assets/recon_output_CVAEBP_25_w_eddy.npy', recon_output)
+# latent_space = model.reparameterize(latent_space_mu,latent_space_logvar)
+# latent_space = latent_space.to('cpu').detach().numpy()
+# u1_fft = torch.fft.fft(latent_space_mu[:,0]).to('cpu').detach().numpy()
+# u1_freq = torch.fft.fftfreq(len(latent_space_mu[:,0]), d=0.00712).to('cpu').detach().numpy()
+# u2_fft = torch.fft.fft(latent_space_mu[:,1]).to('cpu').detach().numpy()
+# u2_freq = torch.fft.fftfreq(len(latent_space_mu[:,1]), d=0.00712).to('cpu').detach().numpy()
+# np.save('./assets/latent_space_CVAEBP_25_w_eddy.npy', latent_space)
+
 latent_space_mu, latent_space_logvar = model.encode(Phi_rt_init, t1t2theta)
 recon_output = model.decode(latent_space_mu, t1t2theta0) #NO REPARAMETERIZATION
 recon_output = recon_output.to('cpu').detach().numpy()
-np.save('./assets/recon_output_CVAEBP_25_w_eddy.npy', recon_output)
+np.save('./assets/recon_output_CVAEBP_25_wo_eddy.npy', recon_output)
 latent_space = model.reparameterize(latent_space_mu,latent_space_logvar)
 latent_space = latent_space.to('cpu').detach().numpy()
 u1_fft = torch.fft.fft(latent_space_mu[:,0]).to('cpu').detach().numpy()
 u1_freq = torch.fft.fftfreq(len(latent_space_mu[:,0]), d=0.00712).to('cpu').detach().numpy()
 u2_fft = torch.fft.fft(latent_space_mu[:,1]).to('cpu').detach().numpy()
 u2_freq = torch.fft.fftfreq(len(latent_space_mu[:,1]), d=0.00712).to('cpu').detach().numpy()
-np.save('./assets/latent_space_CVAEBP_25_w_eddy.npy', latent_space)
+np.save('./assets/latent_space_CVAEBP_25_wo_eddy.npy', latent_space)
 
 
 fig, axs = plt.subplots(5, 2, figsize=(10, 10))
@@ -314,7 +326,7 @@ axs[9].plot(u2_freq, np.abs(u2_fft), label='fft of Latent Col 2')
 axs[9].set_xlim(-4, 4)
 axs[9].legend(loc="upper right")
 plt.tight_layout()
-plt.savefig('./plots/5x2_subplots_CVAEBP_25_w_eddy.png')
+plt.savefig('./plots/5x2_subplots_CVAEBP_25_wo_eddy.png')
 
 # torchaudio as filtering
 # class_size = 3
