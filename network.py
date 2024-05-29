@@ -140,6 +140,7 @@ class CVAE(nn.Module):
         h2 = self.relu(self.fc2(h1))
         h3 = self.relu(self.fc3(h2))
         h4 = self.relu(self.fc4(h3))
+        
         z_mu = self.fc51(h4)
         z_var = self.fc52(h4)
         return z_mu, z_var
@@ -192,6 +193,21 @@ class CVAE_BP(nn.Module):
 
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
+        
+    def band_pass_filter(self, z, lower_limit, upper_limit):
+        z_fft = torch.fft.fft(z, dim=-1)
+        z_freq = torch.fft.fftfreq(len(z), d=0.00712, device = 'cuda') # 
+        z_f = torch.where((abs(z_freq) >= lower_limit) & (abs(z_freq) <= upper_limit), z_fft, torch.zeros_like(z_fft))
+        z_filtered = torch.fft.ifft(z_f, dim=-1).real
+        return z_filtered
+    
+    def low_pass_filter(self, z, upper_limit):
+        # Keep only the latent variables within the specified frequency band
+        z_fft = torch.fft.fft(z, dim=-1)
+        z_freq = torch.fft.fftfreq(len(z), d=0.00712, device = 'cuda') # 
+        z_f = torch.where((abs(z_freq) <= upper_limit), z_fft, torch.zeros_like(z_fft))
+        z_filtered = torch.fft.ifft(z_f, dim=-1).real
+        return z_filtered
 
     def encode(self, x, c): # Q(z|x, c)
         '''
@@ -207,13 +223,9 @@ class CVAE_BP(nn.Module):
         z_var = self.fc52(h4)
         u1 = z_mu[:,0]
         u2 = z_mu[:,1]
-        u1_fft = torch.fft.fft(u1, dim=-1)
-        u2_fft = torch.fft.fft(u2, dim=-1)
-        u1_filtered = low_pass_filter(u1_fft, 0.67)
-        u2_filtered = model.band_pass_filter(u2_fft, 0.67, 3)
-        mu_filtered[:,0] = model.from_frequency_domain(u1_filtered)
-        mu_filtered[:,1] = model.from_frequency_domain(u2_filtered)
-        
+        u1_filtered = self.low_pass_filter(u1, 0.67)
+        u2_filtered = self.band_pass_filter(u2, 0.67, 2.5)
+        z_mu = torch.stack((u1_filtered,u2_filtered),dim=1)
         return z_mu, z_var
 
     def reparameterize(self, mu, logvar):
@@ -221,25 +233,6 @@ class CVAE_BP(nn.Module):
         eps = torch.randn_like(std)
         return mu + eps*std
     
-    def to_fft(self, z):
-        # Apply FFT to the latent variables
-        z_fft = torch.fft.fft(z, dim=-1)
-        return z_fft
-
-    def from_frequency_domain(self, z_fft):
-        # Apply inverse FFT to convert back to the time domain
-        z = torch.fft.ifft(z_fft, dim=-1)
-        return z.real  # Take the real part, assuming the latent space is real-valued
-    
-    def band_pass_filter(self, z, lower_limit, upper_limit):
-        # Keep only the latent variables within the specified frequency band
-        filtered_z = torch.where((z.real >= lower_limit) & (z.real <= upper_limit), z, torch.zeros_like(z))
-        return filtered_z
-    
-    def low_pass_filter(self, z, upper_limit):
-        # Keep only the latent variables within the specified frequency band
-        filtered_z = torch.where((z.real <= upper_limit), z, torch.zeros_like(z))
-        return filtered_z
 
     def decode(self, z, c): # P(x|z, c)
         '''
