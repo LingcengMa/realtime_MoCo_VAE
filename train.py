@@ -282,6 +282,26 @@ NRMSE = []
 # print("Training complete")
 
 model.load_state_dict(torch.load('CVAEBP_C25Hz.pth'))
+
+###### pause contrast ######
+Segidx_max = torch.max(Segidx_mu)
+Segidx_fixed = Segidx_mu
+Segidx_fixed = Segidx_fixed.fill_(Segidx_max.item())
+
+wallClock_fixed = wallClock_mu
+wallClock_min = torch.min(wallClock_mu)
+wallClock_fixed = wallClock_fixed.fill_(wallClock_min.item())
+
+# NonlinearT1_max = torch.max(NonlinearT1_mu)
+# NonlinearT1_fixed = NonlinearT1_mu
+# NonlinearT1_fixed = NonlinearT1_fixed.fill_(NonlinearT1_max.item())
+
+# NonlinearT2_max = torch.max(NonlinearT2_mu)
+# NonlinearT2_fixed = NonlinearT2_mu
+# NonlinearT2_fixed = NonlinearT2_fixed.fill_(NonlinearT2_max.item())
+
+T1T2fixedtheta0 = torch.cat([Segidx_fixed, wallClock_fixed, theta0], dim=1).to(torch.float32)
+
 # latent_space_mu, latent_space_logvar = model.encode(Phi_rt_init, t1t2theta)
 # recon_output = model.decode(latent_space_mu, t1t2theta) #NO REPARAMETERIZATION
 # recon_output = recon_output.to('cpu').detach().numpy()
@@ -295,17 +315,16 @@ model.load_state_dict(torch.load('CVAEBP_C25Hz.pth'))
 # np.save('./assets/latent_space_CVAEBP_25_w_eddy.npy', latent_space)
 
 latent_space_mu, latent_space_logvar = model.encode(Phi_rt_init, t1t2theta)
-recon_output = model.decode(latent_space_mu, t1t2theta0) #NO REPARAMETERIZATION
+recon_output = model.decode(latent_space_mu, T1T2fixedtheta0) #NO REPARAMETERIZATION
 recon_output = recon_output.to('cpu').detach().numpy()
-np.save('./assets/recon_output_CVAEBP_25_wo_eddy.npy', recon_output)
+np.save('./assets/recon_output_CVAEBP_25_wo_eddy_pausecontrast.npy', recon_output)
 latent_space = model.reparameterize(latent_space_mu,latent_space_logvar)
 latent_space = latent_space.to('cpu').detach().numpy()
 u1_fft = torch.fft.fft(latent_space_mu[:,0]).to('cpu').detach().numpy()
 u1_freq = torch.fft.fftfreq(len(latent_space_mu[:,0]), d=0.00712).to('cpu').detach().numpy()
 u2_fft = torch.fft.fft(latent_space_mu[:,1]).to('cpu').detach().numpy()
 u2_freq = torch.fft.fftfreq(len(latent_space_mu[:,1]), d=0.00712).to('cpu').detach().numpy()
-np.save('./assets/latent_space_CVAEBP_25_wo_eddy.npy', latent_space)
-
+np.save('./assets/latent_space_CVAEBP_25_wo_eddy_pausecontrast.npy', latent_space)
 
 fig, axs = plt.subplots(5, 2, figsize=(10, 10))
 axs = axs.flatten()  # Flatten the 2x2 array of axes for easy indexing
@@ -326,7 +345,43 @@ axs[9].plot(u2_freq, np.abs(u2_fft), label='fft of Latent Col 2')
 axs[9].set_xlim(-4, 4)
 axs[9].legend(loc="upper right")
 plt.tight_layout()
-plt.savefig('./plots/5x2_subplots_CVAEBP_25_wo_eddy.png')
+plt.savefig('./plots/5x2_subplots_CVAEBP_25_wo_eddy_pausecontrast.png')
+
+
+model.load_state_dict(torch.load('CVAEBP_C25Hz.pth'))
+latent_space_mu, latent_space_logvar = model.encode(Phi_rt_init, t1t2theta)
+###pause motion###
+recon_output = model.decode(latent_space_mu, t1t2theta0) #NO REPARAMETERIZATION
+recon_output = recon_output.to('cpu').detach().numpy()
+np.save('./assets/recon_output_CVAEBP_25_wo_eddy_pausemotion.npy', recon_output)
+latent_space = model.reparameterize(latent_space_mu,latent_space_logvar)
+latent_space = latent_space.to('cpu').detach().numpy()
+u1_fft = torch.fft.fft(latent_space_mu[:,0]).to('cpu').detach().numpy()
+u1_freq = torch.fft.fftfreq(len(latent_space_mu[:,0]), d=0.00712).to('cpu').detach().numpy()
+u2_fft = torch.fft.fft(latent_space_mu[:,1]).to('cpu').detach().numpy()
+u2_freq = torch.fft.fftfreq(len(latent_space_mu[:,1]), d=0.00712).to('cpu').detach().numpy()
+np.save('./assets/latent_space_CVAEBP_25_wo_eddy_pausemotion.npy', latent_space)
+
+fig, axs = plt.subplots(5, 2, figsize=(10, 10))
+axs = axs.flatten()  # Flatten the 2x2 array of axes for easy indexing
+for i in range(4):
+    axs[i].plot(Phi_rt_init[:1800, i].cpu(), label='Phi_rt_init Col ' + str(i + 1))
+    axs[i].plot(recon_output[:1800, i], label='Recon_output Col ' + str(i + 1))
+    axs[i].legend(loc="upper right")
+for i in range(2):
+    axs[4+i].plot(latent_space_mu.detach().cpu().numpy()[:1800,i], label='Latent Col ' + str(i + 1))
+    axs[4+i].legend(loc="upper right")
+for i in range(2):
+    axs[6+i].plot(t1t2theta0[:1800, i].cpu(), label='Known Latent Col ' + str(i + 1))
+    axs[6+i].legend(loc="upper right")
+axs[8].plot(u1_freq, np.abs(u1_fft), label='fft of Latent Col 1')
+axs[8].set_xlim(-4, 4)
+axs[8].legend(loc="upper right")
+axs[9].plot(u2_freq, np.abs(u2_fft), label='fft of Latent Col 2')
+axs[9].set_xlim(-4, 4)
+axs[9].legend(loc="upper right")
+plt.tight_layout()
+plt.savefig('./plots/5x2_subplots_CVAEBP_25_wo_eddy_pausemotion.png')
 
 # torchaudio as filtering
 # class_size = 3
