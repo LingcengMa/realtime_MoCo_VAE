@@ -383,6 +383,9 @@ axs[9].legend(loc="upper right")
 plt.tight_layout()
 plt.savefig('./plots/5x2_subplots_CVAEBP_25_wo_eddy_pausemotion.png')
 
+###pause contrast###
+
+
 # torchaudio as filtering
 # class_size = 3
 # model = CVAE(feature_size, latent_dims, class_size).to(device)
