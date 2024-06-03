@@ -351,7 +351,8 @@ plt.savefig('./plots/5x2_subplots_CVAEBP_25_wo_eddy_pausecontrast.png')
 model.load_state_dict(torch.load('CVAEBP_C25Hz.pth'))
 latent_space_mu, latent_space_logvar = model.encode(Phi_rt_init, t1t2theta)
 ###pause motion###
-recon_output = model.decode(latent_space_mu, t1t2theta0) #NO REPARAMETERIZATION
+latent_space_mu_pause = torch.ones(latent_space_mu.shape).to(device) # set both cardiac and resp state to 1.0 fixed later
+recon_output = model.decode(latent_space_mu_pause, t1t2theta0) #NO REPARAMETERIZATION
 recon_output = recon_output.to('cpu').detach().numpy()
 np.save('./assets/recon_output_CVAEBP_25_wo_eddy_pausemotion.npy', recon_output)
 latent_space = model.reparameterize(latent_space_mu,latent_space_logvar)
@@ -382,8 +383,6 @@ axs[9].set_xlim(-4, 4)
 axs[9].legend(loc="upper right")
 plt.tight_layout()
 plt.savefig('./plots/5x2_subplots_CVAEBP_25_wo_eddy_pausemotion.png')
-
-###pause contrast###
 
 
 # torchaudio as filtering
