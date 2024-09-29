@@ -10,402 +10,295 @@ import numpy as np
 import scipy
 import matplotlib.pyplot as plt; plt.rcParams['figure.dpi'] = 200
 from PIL import Image
-import imageio.v3 as iio
+import cv2
+import imageio.v2 as imageio
 
 #Configuration
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-#model
-# vae4d_hc = VariationalAutoencoder_hc(latent_dims=4).to(device)
-# vae4d_hc_f = VariationalAutoencoder_hc(latent_dims=4).to(device)
-# vae4d_hc_m = VariationalAutoencoder_hc_m(latent_dims=4).to(device)
-# vae4d_hc_m_f = VariationalAutoencoder_hc_m(latent_dims=4).to(device)
+# video visualization
 
-#data
-data_file = os.path.join('/Users/xinguofang/Documents/Research/TI-aware Clustering', 'binning', 'realtime_GT_imgs.mat')
-mat = scipy.io.loadmat(data_file)
-Phi_rt_init = mat['Phi_rt_init'] 
-Phi_rt_init_real = Phi_rt_init.real
-Phi_rt_init_imag = Phi_rt_init.imag
-Phi_rt_init_con = np.concatenate((Phi_rt_init_real, Phi_rt_init_imag), axis = 1)
-Phi_rt_init_con = Phi_rt_init_con.transpose()
-# Phi_rt_init = torch.from_numpy(Phi_rt_init_con).float()
-U_init = mat['U_init']
+# cardiac circle
+cardiac1 = np.load('./assets/cardiac_1_pat.npy')
+# cardiac1 = cardiac1[:, np.newaxis]
+cardiac2 = np.load('./assets/cardiac_2_pat.npy')
+# cardiac2 = cardiac2[:, np.newaxis]
 
+# cardiac_trajectory = []
 
-#data_feature
-data_file= os.path.join('/Users/xinguofang/Documents/Research/TI-aware Clustering', 'binning', 'feature.mat')
-mat = scipy.io.loadmat(data_file)
-Phi_rt_feature = mat['Phi_rt_feature'] 
-Phi_rt_feature_real = Phi_rt_feature.real
-Phi_rt_feature_imag = Phi_rt_feature.imag
-Phi_rt_feature_con = np.concatenate((Phi_rt_feature_real, Phi_rt_feature_imag))
-Phi_rt_feature_con = Phi_rt_feature_con.transpose()
-# Phi_rt_feature = torch.from_numpy(Phi_rt_feature_con).float()
+# for i in range(90, 1800):
+#     plt.figure(figsize=(9, 9))
+    
+#     # Plot the trajectory so far
+#     plt.plot(cardiac1[90:i+1], cardiac2[90:i+1], 'b-', label='Trajectory')  # Trajectory in blue
+    
+#     # Plot the current position
+#     plt.plot(cardiac1[i], cardiac2[i], 'ro', label='Current Position')  # Current position in red
+    
+#     # Set limits and labels
+#     plt.xlim(-7, 7)
+#     plt.ylim(-7, 7)
+#     plt.xlabel('X')
+#     plt.ylabel('Y')
+    
+#     # Place axes at (0, 0)
+#     ax = plt.gca()
+#     ax.spines['left'].set_position('zero')
+#     ax.spines['bottom'].set_position('zero')
+#     ax.spines['right'].set_color('none')
+#     ax.spines['top'].set_color('none')
+#     ax.xaxis.set_ticks_position('bottom')
+#     ax.yaxis.set_ticks_position('left')
 
-M_file= os.path.join('/Users/xinguofang/Documents/Research/TI-aware Clustering', 'binning', 'M.mat')
-mat = scipy.io.loadmat(M_file)
-M = mat['M'] 
-
-recon_LT1_LT2_Phase = np.load('recon_LT1_LT2_Phase.npy')
-recon_NT1_NT2_Phase = np.load('recon_NT1_NT2_Phase.npy')
-
-residual_base = recon_LT1_LT2_Phase - Phi_rt_feature_con
-residual_best = recon_NT1_NT2_Phase - Phi_rt_feature_con
-
-# #load output
-# Phi_rt_init_hat = torch.load('Phi_rt_init_hat.pth')
-# Phi_rt_init_hat = Phi_rt_init_hat.to('cpu').detach().numpy()
-
-# Phi_rt_init_m_hat = torch.load('Phi_rt_init_m_hat.pth')
-# Phi_rt_init_m_hat = Phi_rt_init_m_hat.to('cpu').detach().numpy()
-
-# Phi_rt_feature_hat = torch.load('Phi_rt_feature_hat.pth')
-# Phi_rt_feature_hat = Phi_rt_feature_hat.to('cpu').detach().numpy()
-
-# Phi_rt_feature_m_hat = torch.load('Phi_rt_feature_m_hat.pth')
-# Phi_rt_feature_m_hat = Phi_rt_feature_m_hat.to('cpu').detach().numpy()
-
-# Phi_rt_feature_hat_fixed_linear = torch.load('Phi_rt_feature_hat_fixed_linear.pth')
-# Phi_rt_feature_hat_fixed_linear = Phi_rt_feature_hat_fixed_linear.to('cpu').detach().numpy()
-
-# Phi_rt_feature_hat_fixed_nonlinear = torch.load('Phi_rt_feature_hat_fixed_nonlinear.pth')
-# Phi_rt_feature_hat_fixed_nonlinear = Phi_rt_feature_hat_fixed_nonlinear.to('cpu').detach().numpy()
-
-# visualization
-plt.figure(1)
-plt.plot(Phi_rt_feature_con[0:1800,0], label="Input image signal")
-plt.plot(recon_LT1_LT2_Phase[0:1800,0], label="Baseline Reconstruction")
-plt.plot(recon_NT1_NT2_Phase[0:1800,0], label="Best Performing Reconstruction")
-plt.xlabel("Time")
-plt.ylabel("Phi_rt_feature[0]")
-plt.legend()
-plt.savefig('/Users/xinguofang/Documents/Research/TI-aware Clustering/recon_compare_1.png')
-
-plt.figure(2)
-plt.plot(Phi_rt_feature_con[0:1800,1], label="Input Image Signal")
-plt.plot(recon_LT1_LT2_Phase[0:1800,1], label="Baseline Reconstruction")
-plt.plot(recon_NT1_NT2_Phase[0:1800,1], label="Best Performing Reconstruction")
-plt.xlabel("Time")
-plt.ylabel("Phi_rt_feature[1]")
-plt.legend()
-plt.savefig('/Users/xinguofang/Documents/Research/TI-aware Clustering/recon_compare_2.png')
-
-plt.figure(3)
-plt.plot(Phi_rt_feature_con[0:1800,2], label="Input Image Signal")
-plt.plot(recon_LT1_LT2_Phase[0:1800,2], label="Baseline Reconstruction")
-plt.plot(recon_NT1_NT2_Phase[0:1800,2], label="Best Performing Reconstruction")
-plt.xlabel("Time")
-plt.ylabel("Phi_rt_feature[2]")
-plt.legend()
-plt.savefig('/Users/xinguofang/Documents/Research/TI-aware Clustering/recon_compare_3.png')
-
-plt.figure(4)
-plt.plot(Phi_rt_feature_con[0:1800,3], label="Input Image Signal")
-plt.plot(recon_LT1_LT2_Phase[0:1800,3], label="Baseline Reconstruction")
-plt.plot(recon_NT1_NT2_Phase[0:1800,3], label="Best Performing Reconstruction")
-plt.xlabel("Time")
-plt.ylabel("Phi_rt_feature[3]")
-plt.legend()
-plt.savefig('/Users/xinguofang/Documents/Research/TI-aware Clustering/recon_compare_4.png')
-
-plt.figure(5)
-plt.plot(residual_base[0:1800,0], label="Baseline Reconstruction")
-plt.plot(residual_best[0:1800,0], label="Best Performing Reconstruction")
-plt.axhline(y = 0, color = 'r', linestyle = 'dashed') 
-plt.xlabel("Time")
-plt.ylabel("Residuals[0]")
-plt.legend()
-plt.savefig('/Users/xinguofang/Documents/Research/TI-aware Clustering/residual_compare_1.png')
-
-plt.figure(6)
-plt.plot(residual_base[0:1800,1], label="Baseline Reconstruction")
-plt.plot(residual_best[0:1800,1], label="Best Performing Reconstruction")
-plt.axhline(y = 0, color = 'r', linestyle = 'dashed') 
-plt.xlabel("Time")
-plt.ylabel("Residuals[1]")
-plt.legend()
-plt.savefig('/Users/xinguofang/Documents/Research/TI-aware Clustering/residual_compare_2.png')
-
-plt.figure(7)
-plt.plot(residual_base[0:1800,2], label="Baseline Reconstruction")
-plt.plot(residual_best[0:1800,2], label="Best Performing Reconstruction")
-plt.axhline(y = 0, color = 'r', linestyle = 'dashed') 
-plt.xlabel("Time")
-plt.ylabel("Residuals[2]")
-plt.legend()
-plt.savefig('/Users/xinguofang/Documents/Research/TI-aware Clustering/residual_compare_3.png')
-
-plt.figure(8)
-plt.plot(residual_base[0:1800,3], label="Baseline Reconstruction")
-plt.plot(residual_best[0:1800,3], label="Best Performing Reconstruction")
-plt.axhline(y = 0, color = 'r', linestyle = 'dashed') 
-plt.xlabel("Time")
-plt.ylabel("Residuals[3]")
-plt.legend()
-plt.savefig('/Users/xinguofang/Documents/Research/TI-aware Clustering/residual_compare_4.png')
-
-#image
-# recon_LT1_LT2_Phase_complex = recon_LT1_LT2_Phase[:, :48] + 1j * recon_LT1_LT2_Phase[:,48:96]
-# recon_LT1_LT2_Phase_complex = recon_LT1_LT2_Phase_complex.transpose()
-# # loss = Phi_rt_feature_hat_complex - Phi_rt_feature
-# recon_NT1_NT2_Phase_complex = recon_NT1_NT2_Phase[:, :48] + 1j * recon_NT1_NT2_Phase[:,48:96]
-# recon_NT1_NT2_Phase_complex = recon_NT1_NT2_Phase_complex.transpose()
-# # loss_m = Phi_rt_feature_m_hat_complex - Phi_rt_feature
-
-# # Phi_rt_feature_hat_fixed_linear_complex = Phi_rt_feature_hat_fixed_linear[:, :48] + 1j * Phi_rt_feature_hat_fixed_linear[:,48:96]
-# # Phi_rt_feature_hat_fixed_linear_complex = Phi_rt_feature_hat_fixed_linear_complex.transpose()
-# # Phi_rt_feature_hat_fixed_nonlinear_complex = Phi_rt_feature_hat_fixed_nonlinear[:, :48] + 1j * Phi_rt_feature_hat_fixed_nonlinear[:,48:96]
-# # Phi_rt_feature_hat_fixed_nonlinear_complex = Phi_rt_feature_hat_fixed_nonlinear_complex.transpose()
-
-# img_m = np.matmul(U_init, M)
-
-# # img_original = np.abs(np.matmul(img_m, Phi_rt_feature[:,0:1800]))
-# # img_recon_linear = np.abs(np.matmul(img_m, Phi_rt_feature_hat_complex[:,0:1800]))
-# # img_recon_modified = np.abs(np.matmul(img_m, Phi_rt_feature_m_hat_complex[:,0:1800]))
-# # img_loss_linear = np.abs(np.matmul(img_m, loss[:,0:1800]))
-# # img_loss_modified = np.abs(np.matmul(img_m, loss_m[:,0:1800]))
-# img_recon_base= np.abs(np.matmul(img_m, recon_LT1_LT2_Phase_complex[:,0:1800]))
-# img_recon_best = np.abs(np.matmul(img_m, recon_NT1_NT2_Phase_complex[:,0:1800]))
-
-# # img_recon_linear_fixed = np.abs(np.matmul(img_m, Phi_rt_feature_hat_fixed_linear_complex[:,0:1800]))
-# # img_recon_nonlinear_fixed = np.abs(np.matmul(img_m, Phi_rt_feature_hat_fixed_nonlinear_complex[:,0:1800]))
-
-# if not os.path.exists('output_images_recon_base'):
-#     os.makedirs('output_images_recon_base')
-
-# # Reshape the data into 1800 images (320x320 each)
-# for i in range(1800):
-#     image_data = img_recon_base[:, :, i]
-#     plt.imshow(image_data)  # You can specify the desired colormap
-#     plt.axis('off')  # Turn off axis labels
-#     plt.savefig(f'output_images_recon_base/image_{i:04d}.png', bbox_inches='tight', pad_inches=0)
+#     # Show grid for better visualization (optional)
+#     plt.grid(True)
+    
+#     # Add legend
+#     plt.legend()
+    
+#     # Save the plot as an image in the list
+#     plt.savefig(f'plot_{i}.png')
+#     cardiac_trajectory.append(imageio.imread(f'plot_{i}.png'))
+    
 #     plt.close()
+    
+# # Create the GIF
+# imageio.mimsave('./assets/cardiac_trajectory_test_1.gif', cardiac_trajectory, duration=0.001)
 
-# # Create a list of image file paths
-# image_files = ['output_images_recon_base/image_{:04d}.png'.format(i) for i in range(1800)]
+plt.figure(figsize=(9, 9))
+    
+# Plot the trajectory so far
+plt.plot(cardiac1[90:1800], cardiac2[90:1800], 'b-', label='Trajectory')  # Trajectory in blue
+    
+# Plot the current position
+plt.plot(cardiac1[1800], cardiac2[1800], 'ro', label='Current Position')  # Current position in red
 
-# # Specify the output GIF file name
-# output_gif = 'output_recon_base.gif'
+radius = 4.643391
 
-# frames = np.stack([iio.imread(image_file) for image_file in image_files], axis=0)
-# iio.imwrite(output_gif, frames, duration=5)
+# Generate points for the circle
+theta = np.linspace(0, 2 * np.pi, 100)  # 100 points from 0 to 2π
+x = radius * np.cos(theta)
+y = radius * np.sin(theta)
 
+# Plot the circle
+plt.plot(x, y, label='average cardiac cycle', color='red', linewidth=4)
 
-# if not os.path.exists('output_images_recon_best'):
-#     os.makedirs('output_images_recon_best')
+# Set equal scaling so the circle isn't skewed
+plt.gca().set_aspect('equal', adjustable='box')
 
-# Reshape the data into 1800 images (320x320 each)
-# for i in range(1800):
-#     image_data = img_recon_best[:, :, i]
-#     plt.imshow(image_data)  # You can specify the desired colormap
-#     plt.axis('off')  # Turn off axis labels
-#     plt.savefig(f'output_images_recon_best/image_{i:04d}.png', bbox_inches='tight', pad_inches=0)
-#     plt.close()
+# Set limits and labels
+plt.xlim(-7, 7)
+plt.ylim(-7, 7)
+plt.xlabel('X')
+plt.ylabel('Y')
+    
+# Place axes at (0, 0)
+ax = plt.gca()
+ax.spines['left'].set_position('zero')
+ax.spines['bottom'].set_position('zero')
+ax.spines['right'].set_color('none')
+ax.spines['top'].set_color('none')
+ax.xaxis.set_ticks_position('bottom')
+ax.yaxis.set_ticks_position('left')
 
-# # Create a list of image file paths
-# image_files = ['output_images_recon_best/image_{:04d}.png'.format(i) for i in range(1800)]
+# Show grid for better visualization (optional)
+plt.grid(True)
+    
+# Add legend
+plt.legend()
+    
+# Save the plot as an image in the list
+plt.savefig('plot_1800.png')
 
-# # Specify the output GIF file name
-# output_gif = 'output_recon_best.gif'
+# for i in range(90,1800):
+#     os.remove(f'plot_{i}.png')
 
-# # Save the images as frames of a GIF
-# frames = np.stack([iio.imread(image_file) for image_file in image_files], axis=0)
-# iio.imwrite(output_gif, frames, duration=5)
+# Load the data
+# patient data
+# original_rt_file = '/home/xfang/Data/gifs_qual/patient/recon_realtime_original.gif'
+# recon_rt_file = '/home/xfang/Data/gifs_qual/patient/recon_realtime_wo_ec.gif'
+# mt_card_file = '/home/xfang/Data/gifs_qual/patient/pat_mt_reconCard.gif'
+# mt_resp_file = '/home/xfang/Data/gifs_qual/patient/pat_mt_reconResp.gif'
+# mt_recovery_file = '/home/xfang/Data/gifs_qual/patient/pat_mt_reconRecovery.gif'
+# mt_card_file_wavelet = '/home/xfang/Data/gifs_qual/patient/pat_mt_reconCard_wavelet.gif'
+# mt_resp_file_wavelet = '/home/xfang/Data/gifs_qual/patient/pat_mt_reconResp_wavelet.gif'
+# mt_recovery_file_wavelet = '/home/xfang/Data/gifs_qual/patient/pat_mt_reconRecovery_wavelet.gif'
+# gen_card_file = '/home/xfang/Data/gifs_qual/patient/gen_cardiac.gif'
+# gen_resp_file = '/home/xfang/Data/gifs_qual/patient/gen_respphase.gif'
+# gen_recovery_file = '/home/xfang/Data/gifs_qual/patient/gen_reconrecovery.gif'
 
-# if not os.path.exists('output_images_recon_linear'):
-#     os.makedirs('output_images_recon_linear')
+# # Path to the static images
+# mt_card_path = '/home/xfang/projects/vae_temporal_analysis/recon_img/mt_card_d.png'
+# mt_resp_path = '/home/xfang/projects/vae_temporal_analysis/recon_img/mt_resp_d.png'
+# mt_recovery_path = '/home/xfang/projects/vae_temporal_analysis/recon_img/mt_recovery_d.png'
+# mt_card_wavelet_path = '/home/xfang/projects/vae_temporal_analysis/recon_img/mt_card_wavelet_d.png'
+# mt_resp_wavelet_path = '/home/xfang/projects/vae_temporal_analysis/recon_img/mt_resp_wavelet_d.png'
+# mt_recovery_wavelet_path = '/home/xfang/projects/vae_temporal_analysis/recon_img/mt_recovery_wavelet_d.png'
+# gen_card_path = '/home/xfang/projects/vae_temporal_analysis/recon_img/gen_card_d.png'
+# gen_resp_path = '/home/xfang/projects/vae_temporal_analysis/recon_img/gen_resp_d.png'
+# gen_recovery_path = '/home/xfang/projects/vae_temporal_analysis/recon_img/gen_recovery_d.png'
+# original_rt_path = '/home/xfang/projects/vae_temporal_analysis/recon_img/original_d.png'
+# recon_rt_path = '/home/xfang/projects/vae_temporal_analysis/recon_img/recon_rt_d.png'
 
-# # Reshape the data into 1800 images (320x320 each)
-# for i in range(1800):
-#     image_data = img_recon_linear[:, :, i]
-#     plt.imshow(image_data)  # You can specify the desired colormap
-#     plt.axis('off')  # Turn off axis labels
-#     plt.savefig(f'output_images_recon_linear/image_{i:04d}.png', bbox_inches='tight', pad_inches=0)
-#     plt.close()
+# # # CV data
+# original_rt_file = '/home/xfang/Data/gifs_qual/CV/cv_reconRealtime.gif'
+# recon_rt_file = '/home/xfang/Data/gifs_qual/CV/cv_reconRealtime_HT_wo_eddy.gif'
+# mt_card_file = '/home/xfang/Data/gifs_qual/CV/cv_reconCard.gif'
+# mt_resp_file = '/home/xfang/Data/gifs_qual/CV/cv_reconResp.gif'
+# mt_recovery_file = '/home/xfang/Data/gifs_qual/CV/cv_reconRecovery.gif'
+# mt_card_file_wavelet = '/home/xfang/Data/gifs_qual/CV/cv_reconCard_wavelet.gif'
+# mt_resp_file_wavelet = '/home/xfang/Data/gifs_qual/CV/cv_reconResp_wavelet.gif'
+# mt_recovery_file_wavelet = '/home/xfang/Data/gifs_qual/CV/cv_reconRecovery_wavelet.gif'
+# gen_card_file = '/home/xfang/Data/gifs_qual/CV/cv_generative_card.gif'
+# gen_resp_file = '/home/xfang/Data/gifs_qual/CV/cv_generative_resp.gif'
+# gen_recovery_file = '/home/xfang/Data/gifs_qual/CV/cv_generative_contrast.gif'
 
-# # Create a list of image file paths
-# image_files = ['output_images_recon_linear/image_{:04d}.png'.format(i) for i in range(1800)]
+# # Path to the static images
+# mt_card_path = '/home/xfang/projects/vae_temporal_analysis/CV_IMGS/mt_card_cv.png'
+# mt_resp_path = '/home/xfang/projects/vae_temporal_analysis/CV_IMGS/mt_resp_cv.png'
+# mt_recovery_path = '/home/xfang/projects/vae_temporal_analysis/CV_IMGS/mt_recovery_cv.png'
+# mt_card_wavelet_path = '/home/xfang/projects/vae_temporal_analysis/CV_IMGS/mt_card_wavelet_cv.png'
+# mt_resp_wavelet_path = '/home/xfang/projects/vae_temporal_analysis/CV_IMGS/mt_resp_wavelet_cv.png'
+# mt_recovery_wavelet_path = '/home/xfang/projects/vae_temporal_analysis/CV_IMGS/mt_recovery_wavelet_cv.png'
+# gen_card_path = '/home/xfang/projects/vae_temporal_analysis/CV_IMGS/gen_card_cv.png'
+# gen_resp_path = '/home/xfang/projects/vae_temporal_analysis/CV_IMGS/gen_resp_cv.png'
+# gen_recovery_path = '/home/xfang/projects/vae_temporal_analysis/CV_IMGS/gen_recovery_cv.png'
+# original_rt_path = '/home/xfang/projects/vae_temporal_analysis/CV_IMGS/original_cv.png'
+# recon_rt_path = '/home/xfang/projects/vae_temporal_analysis/CV_IMGS/recon_rt_cv.png'
 
-# # Specify the output GIF file name
-# output_gif = 'output_recon_linear.gif'
+# # # MID data
+# original_rt_file = '/home/xfang/Data/gifs_qual/MID/mid_reconRealtime.gif'
+# recon_rt_file = '/home/xfang/Data/gifs_qual/MID/mid_reconRealtime_HT_wo_eddy.gif'
+# mt_card_file = '/home/xfang/Data/gifs_qual/MID/mid_reconCard.gif'
+# mt_resp_file = '/home/xfang/Data/gifs_qual/MID/mid_reconResp.gif'
+# mt_recovery_file = '/home/xfang/Data/gifs_qual/MID/mid_reconRecovery.gif'
+# mt_card_file_wavelet = '/home/xfang/Data/gifs_qual/MID/mid_reconCard.gif'
+# mt_resp_file_wavelet = '/home/xfang/Data/gifs_qual/MID/mid_reconResp.gif'
+# mt_recovery_file_wavelet = '/home/xfang/Data/gifs_qual/MID/mid_reconRecovery.gif'
+# gen_card_file = '/home/xfang/Data/gifs_qual/MID/mid_generative_card.gif'
+# gen_resp_file = '/home/xfang/Data/gifs_qual/MID/mid_generative_resp.gif'
+# gen_recovery_file = '/home/xfang/Data/gifs_qual/MID/mid_generative_contrast.gif'
 
-# # Save the images as frames of a GIF
-# with iio.get_writer(output_gif, mode='I', duration=10) as writer:
-#     for image_file in image_files:
-#         image = iio.imread(image_file)
-#         writer.append_data(image)
-
-# #-----------------------------------#
-# if not os.path.exists('output_images_recon_modified'):
-#     os.makedirs('output_images_recon_modified')
-
-# # Reshape the data into 1800 images (320x320 each)
-# for i in range(1800):
-#     image_data = img_recon_modified[:, :, i]
-#     plt.imshow(image_data)  # You can specify the desired colormap
-#     plt.axis('off')  # Turn off axis labels
-#     plt.savefig(f'output_images_recon_modified/image_{i:04d}.png', bbox_inches='tight', pad_inches=0)
-#     plt.close()
-
-# # Create a list of image file paths
-# image_files = ['output_images_recon_modified/image_{:04d}.png'.format(i) for i in range(1800)]
-
-# # Specify the output GIF file name
-# output_gif = 'output_recon_modified.gif'
-
-# # Save the images as frames of a GIF
-# with iio.get_writer(output_gif, mode='I', duration=10) as writer:
-#     for image_file in image_files:
-#         image = iio.imread(image_file)
-#         writer.append_data(image)
-
-# image_original_list = [Image.fromarray(img_original[:, :, i]) for i in range(1800)]
-# image_recon_linear_list = [Image.fromarray(img_recon_linear[:, :, i]) for i in range(1800)]
-# image_recon_modified_list = [Image.fromarray(img_recon_modified[:, :, i]) for i in range(1800)]
-
-# output_gif_original = 'original.gif'
-# output_gif_linear = 'linear.gif'
-# output_gif_modified = 'modified.gif'
-
-# imageio.mimsave(output_gif_original, image_original_list, duration=10)
-# imageio.mimsave(output_gif_linear, image_recon_linear_list, duration=10)
-# imageio.mimsave(output_gif_modified, image_recon_modified_list, duration=10)
-
-# #-----------------------------------------#
-# if not os.path.exists('output_images_recon_linear_fixed'):
-#     os.makedirs('output_images_recon_linear_fixed')
-
-# # Reshape the data into 1800 images (320x320 each)
-# for i in range(1800):
-#     image_data = img_recon_linear_fixed[:, :, i]
-#     plt.imshow(image_data)  # You can specify the desired colormap
-#     plt.axis('off')  # Turn off axis labels
-#     plt.savefig(f'output_images_recon_linear_fixed/image_{i:04d}.png', bbox_inches='tight', pad_inches=0)
-#     plt.close()
-
-# # Create a list of image file paths
-# image_files = ['output_images_recon_linear_fixed/image_{:04d}.png'.format(i) for i in range(1800)]
-
-# # Specify the output GIF file name
-# output_gif = 'output_recon_linear_fixed.gif'
-
-# # Save the images as frames of a GIF
-# frames = np.stack([iio.imread(image_file) for image_file in image_files], axis=0)
-# iio.imwrite(output_gif, frames)
-# # with iio.get_writer(output_gif, mode='I', duration=10) as writer:
-# #     for image_file in image_files:
-# #         image = iio.imread(image_file)
-# #         writer.append_data(image)
-
-#-----------------------------------------#
-# if not os.path.exists('output_images_recon_nonlinear_fixed'):
-#     os.makedirs('output_images_recon_nonlinear_fixed')
-
-# # Reshape the data into 1800 images (320x320 each)
-# for i in range(1800):
-#     image_data = img_recon_nonlinear_fixed[:, :, i]
-#     plt.imshow(image_data)  # You can specify the desired colormap
-#     plt.axis('off')  # Turn off axis labels
-#     plt.savefig(f'output_images_recon_nonlinear_fixed/image_{i:04d}.png', bbox_inches='tight', pad_inches=0)
-#     plt.close()
-
-# # Create a list of image file paths
-# image_files = ['output_images_recon_nonlinear_fixed/image_{:04d}.png'.format(i) for i in range(1800)]
-
-# # Specify the output GIF file name
-# output_gif = 'output_recon_nonlinear_fixed.gif'
-
-# # Save the images as frames of a GIF
-# frames = np.stack([iio.imread(image_file) for image_file in image_files], axis=0)
-# iio.imwrite(output_gif, frames)
-# # with iio.get_writer(output_gif, mode='I', duration=10) as writer:
-# #     for image_file in image_files:
-# #         image = iio.imread(image_file)
-# #         writer.append_data(image)
-
-# #-----------------------------------------#
-# #subtraction
-# if not os.path.exists('output_images_loss'):
-#     os.makedirs('output_images_loss')
-
-# # Reshape the data into 1800 images (320x320 each)
-# for i in range(1800):
-#     image_data = img_loss_linear[:, :, i]
-#     plt.imshow(image_data)  # You can specify the desired colormap
-#     plt.axis('off')  # Turn off axis labels
-#     plt.savefig(f'output_images_loss/image_{i:04d}.png', bbox_inches='tight', pad_inches=0)
-#     plt.close()
-
-# # Create a list of image file paths
-# image_files = ['output_images_loss/image_{:04d}.png'.format(i) for i in range(1800)]
-
-# # Specify the output GIF file name
-# output_gif = 'output_loss.gif'
-
-# # Save the images as frames of a GIF
-# frames = np.stack([iio.imread(image_file) for image_file in image_files], axis=0)
-# iio.imwrite(output_gif, frames, duration=10)
-
-# #-----------------------------------------#
-# if not os.path.exists('output_images_loss_m'):
-#     os.makedirs('output_images_loss_m')
-
-# # Reshape the data into 1800 images (320x320 each)
-# for i in range(1800):
-#     image_data = img_loss_modified[:, :, i]
-#     plt.imshow(image_data)  # You can specify the desired colormap
-#     plt.axis('off')  # Turn off axis labels
-#     plt.savefig(f'output_images_loss_m/image_{i:04d}.png', bbox_inches='tight', pad_inches=0)
-#     plt.close()
-
-# # Create a list of image file paths
-# image_files = ['output_images_loss_m/image_{:04d}.png'.format(i) for i in range(1800)]
-
-# # Specify the output GIF file name
-# output_gif = 'output_loss_m.gif'
-
-# # Save the images as frames of a GIF
-# frames = np.stack([iio.imread(image_file) for image_file in image_files], axis=0)
-# iio.imwrite(output_gif, frames, duration=10)
+# # Path to the static images
+# mt_card_path = '/home/xfang/Data/gifs_qual/MID_IMGS/mt_card_cv.png'
+# mt_resp_path = '/home/xfang/Data/gifs_qual/MID_IMGS/mt_resp_cv.png'
+# mt_recovery_path = '/home/xfang/Data/gifs_qual/MID_IMGS/mt_recovery_cv.png'
+# mt_card_wavelet_path = '/home/xfang/Data/gifs_qual/MID_IMGS/mt_card_wavelet_cv.png'
+# mt_resp_wavelet_path = '/home/xfang/Data/gifs_qual/MID_IMGS/mt_resp_wavelet_cv.png'
+# mt_recovery_wavelet_path = '/home/xfang/Data/gifs_qual/MID_IMGS/mt_recovery_wavelet_cv.png'
+# gen_card_path = '/home/xfang/Data/gifs_qual/MID_IMGS/gen_card_cv.png'
+# gen_resp_path = '/home/xfang/Data/gifs_qual/MID_IMGS/gen_resp_cv.png'
+# gen_recovery_path = '/home/xfang/Data/gifs_qual/MID_IMGS/gen_recovery_cv.png'
+# original_rt_path = '/home/xfang/Data/gifs_qual/MID_IMGS/original_cv.png'
+# recon_rt_path = '/home/xfang/Data/gifs_qual/MID_IMGS/recon_rt_cv.png'
 
 
+# # Open the GIF
+# gif1 = Image.open(original_rt_file)
+# gif2 = Image.open(recon_rt_file)
+
+# gif3= Image.open(mt_card_file)
+# gif4 = Image.open(mt_card_file_wavelet)
+# gif5 = Image.open(gen_card_file)
+
+# gif6= Image.open(mt_resp_file)
+# gif7 = Image.open(mt_resp_file_wavelet)
+# gif8 = Image.open(gen_resp_file)
+
+# gif9= Image.open(mt_recovery_file)
+# gif10 = Image.open(mt_recovery_file_wavelet)
+# gif11 = Image.open(gen_recovery_file)
+
+# # Create a list to store the rows
+
+# for i in range(1,6):
+#     rows = []
+#     try:
+#         while True:
+#             if i == 1:
+#                 gif = gif1
+#             elif i == 2:
+#                 gif = gif2
+#             elif i == 3:
+#                 gif = gif3
+#             elif i == 4:
+#                 gif = gif4
+#             elif i == 5:
+#                 gif = gif5
+#             frame = gif.convert('RGB')
+#             frame_array = np.array(frame)
+#             row = frame_array[:,97, :] # 68 for cardiac and real-time, 97 for mid
+#             rows.append(row)
+#             gif.seek(gif.tell() + 1)
+#             output_image_array = np.stack(rows, axis=1)
+#             output_image = Image.fromarray(output_image_array)
+#             if i == 1:
+#                 output_image.save(original_rt_path)
+#             elif i == 2:
+#                 output_image.save(recon_rt_path)
+#             elif i == 3:  
+#                 output_image.save(mt_card_path)
+#             elif i == 4:
+#                 output_image.save(mt_card_wavelet_path)
+#             elif i == 5:
+#                 output_image.save(gen_card_path)
+#     except EOFError:
+#         pass
+    
+# for i in range(6,9):
+#     rows = []
+#     try:
+#         while True:
+#             if i == 6:
+#                 gif = gif6
+#             elif i == 7:
+#                 gif = gif7
+#             elif i == 8:
+#                 gif = gif8
+#             frame = gif.convert('RGB')
+#             frame_array = np.array(frame)
+#             row = frame_array[145, :, :] # 120 for resp, 145 for mid resp
+#             rows.append(row)
+#             gif.seek(gif.tell() + 1)
+#             output_image_array = np.stack(rows, axis=1)
+#             output_image = Image.fromarray(output_image_array)
+#             if i == 6:
+#                 output_image.save(mt_resp_path)
+#             elif i == 7:  
+#                 output_image.save(mt_resp_wavelet_path)
+#             elif i == 8:
+#                 output_image.save(gen_resp_path)
+#     except EOFError:
+#         pass
+
+# for i in range(9,12):
+#     rows = []
+#     try:
+#         while True:
+#             if i == 9:
+#                 gif = gif9
+#             elif i == 10:
+#                 gif = gif10
+#             elif i == 11:
+#                 gif = gif11
+#             frame = gif.convert('RGB')
+#             frame_array = np.array(frame)
+#             row = frame_array[:, 97, :] # 75 for recovery
+#             rows.append(row)
+#             gif.seek(gif.tell() + 1)
+#             output_image_array = np.stack(rows, axis=1)
+#             output_image = Image.fromarray(output_image_array)
+#             if i == 9:
+#                 output_image.save(mt_recovery_path)
+#             elif i == 10:  
+#                 output_image.save(mt_recovery_wavelet_path)
+#             elif i == 11:
+#                 output_image.save(gen_recovery_path)
+#     except EOFError:
+#         pass
 
 
-# image_files = ['output_images_original/image_{:04d}.png'.format(i) for i in range(1800)]
 
-# output_gif = 'output_original.gif'
-
-# frames = np.stack([iio.imread(image_file) for image_file in image_files], axis=0)
-# iio.imwrite(output_gif, frames, duration=10)
-
-# image_files = ['output_images_recon_linear/image_{:04d}.png'.format(i) for i in range(1800)]
-
-# output_gif = 'output_recon_linear.gif'
-
-# frames = np.stack([iio.imread(image_file) for image_file in image_files], axis=0)
-# iio.imwrite(output_gif, frames, duration=10)
-
-# image_files = ['output_images_recon_modified/image_{:04d}.png'.format(i) for i in range(1800)]
-
-# output_gif = 'output_recon_modified.gif'
-
-# frames = np.stack([iio.imread(image_file) for image_file in image_files], axis=0)
-# iio.imwrite(output_gif, frames, duration=10)
-
-# image_files = ['output_images_recon_nonlinear_fixed/image_{:04d}.png'.format(i) for i in range(1800)]
-
-# output_gif = 'output_recon_nonlinear_fixed.gif'
-
-# frames = np.stack([iio.imread(image_file) for image_file in image_files], axis=0)
-# iio.imwrite(output_gif, frames, duration=10)
-
-# image_files = ['output_images_recon_linear_fixed/image_{:04d}.png'.format(i) for i in range(1800)]
-
-# output_gif = 'output_recon_linear_fixed.gif'
-
-# frames = np.stack([iio.imread(image_file) for image_file in image_files], axis=0)
-# iio.imwrite(output_gif, frames, duration=10)
 
 
 

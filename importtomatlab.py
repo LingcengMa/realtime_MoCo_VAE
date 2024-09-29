@@ -21,17 +21,19 @@ import matplotlib.pyplot as plt; plt.rcParams['figure.dpi'] = 200
 
 
 path = os.path.dirname(os.path.realpath(__file__))
-data_file = os.path.join(path, 'assets/recon_output_CVAEBP_25_w_eddy.npy')
-data_w_eddy = np.load(data_file)
-data_file = os.path.join(path, 'assets/recon_output_CVAEBP_25_wo_eddy_pausecontrast.npy')
-data_wo_eddy_pausecontrast = np.load(data_file)
-data_file = os.path.join(path, 'assets/recon_output_CVAEBP_25_wo_eddy.npy')
+data_file = os.path.join(path, 'SMS/recon_output_0528_run1.npy')
 data_wo_eddy = np.load(data_file)
-data_file = os.path.join(path, 'assets/recon_output_CVAEBP_25_wo_eddy_pausemotion.npy')
-data_wo_eddy_pausemotion = np.load(data_file)
+data_file = os.path.join(path, 'SMS/recon_output_resp_0528_run1.npy')
+data_resp_phase = np.load(data_file)
+data_file = os.path.join(path, 'SMS/recon_output_contrast_0528_run1.npy')
+data_contrast = np.load(data_file)
+data_file = os.path.join(path, 'SMS/recon_output_card_0528_run1.npy')
+data_sin_card = np.load(data_file)
+
 
 # Save as .mat file
-scipy.io.savemat('ImportToMatlab_w_eddy.mat', {'data': data_w_eddy})
-scipy.io.savemat('ImportToMatlab_wo_eddy.mat', {'data': data_wo_eddy})
-scipy.io.savemat('ImportToMatlab_wo_eddy_pausecontrast.mat', {'data': data_wo_eddy_pausecontrast})
-scipy.io.savemat('ImportToMatlab_wo_eddy_pausemotion.mat', {'data': data_wo_eddy_pausemotion})
+# scipy.io.savemat('ImportToMatlab_HT_ee_ed.mat', {'data': data_})
+scipy.io.savemat('/home/xfang/Data/Multitasking_SMS/Human_SMS_20210528/2D_SMS_DATA/ImportToMatlab_0528_run1.mat', {'data': data_wo_eddy})
+scipy.io.savemat('/home/xfang/Data/Multitasking_SMS/Human_SMS_20210528/2D_SMS_DATA/ImportToMatlab_resp_0528_run1.mat', {'data': data_resp_phase})
+scipy.io.savemat('/home/xfang/Data/Multitasking_SMS/Human_SMS_20210528/2D_SMS_DATA/ImportToMatlab_card_0528_run1.mat', {'data': data_sin_card})
+scipy.io.savemat('/home/xfang/Data/Multitasking_SMS/Human_SMS_20210528/2D_SMS_DATA/ImportToMatlab_contrast_0528_run1.mat', {'data': data_contrast})
