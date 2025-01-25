@@ -199,7 +199,7 @@ class CVAE_BP(nn.Module):
         z_filtered = torch.fft.ifft(z_f, dim=-1).real
         return z_filtered
     
-    def low_pass_filter(self, z, upper_limit):
+    def low_pass_filter(self, z, upper_limit): # extend the input
         # Keep only the latent variables within the specified frequency band
         z_fft = torch.fft.fft(z, dim=-1)
         z_freq = torch.fft.fftfreq(len(z), d=0.00712, device = 'cuda') # 
@@ -277,7 +277,7 @@ class CVAE_BP_HT(nn.Module):
         
     def band_pass_filter(self, z, lower_limit, upper_limit):
         z_fft = torch.fft.fft(z, dim=-1)
-        z_freq = torch.fft.fftfreq(len(z), d=0.00712, device = 'cuda') # 
+        z_freq = torch.fft.fftfreq(len(z), d=0.0534, device = 'cuda') # was 0.00712 0.0534 for cine data
         z_f = torch.where((abs(z_freq) >= lower_limit) & (abs(z_freq) <= upper_limit), z_fft, torch.zeros_like(z_fft))
         z_filtered = torch.fft.ifft(z_f, dim=-1).real
         return z_filtered
@@ -285,9 +285,10 @@ class CVAE_BP_HT(nn.Module):
     def low_pass_filter(self, z, upper_limit):
         # Keep only the latent variables within the specified frequency band
         z_fft = torch.fft.fft(z, dim=-1)
-        z_freq = torch.fft.fftfreq(len(z), d=0.00712, device = 'cuda') # 
+        z_freq = torch.fft.fftfreq(len(z), d=0.0534, device = 'cuda') # was 0.00712 0.0534 for cine data
         z_f = torch.where((abs(z_freq) <= upper_limit), z_fft, torch.zeros_like(z_fft))
         z_filtered = torch.fft.ifft(z_f, dim=-1).real
+        z_filtered = z_filtered - z_filtered.mean()
         return z_filtered
     
     def hilbert_transform(self, signal):
@@ -329,6 +330,7 @@ class CVAE_BP_HT(nn.Module):
         u2 = z_mu[:,1]
         u1_filtered = self.low_pass_filter(u1, 0.67)
         u2_filtered = self.band_pass_filter(u2, 0.67, 2.5)
+        # u2_filtered = self.band_pass_filter(u2, 1, 1.2) # set the bandpass filter to 1-1.2 Hz
         u3 = self.hilbert_transform(u2_filtered)
         z_mu = torch.stack((u1_filtered,u2_filtered,u3),dim=1)
         z_var = torch.stack((z_var[:,0],z_var[:,1],z_var[:,1]),dim=1) # set the variance of the Hilbert transform to var2

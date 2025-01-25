@@ -9,74 +9,35 @@ import torchvision
 import numpy as np
 import scipy
 import matplotlib.pyplot as plt; plt.rcParams['figure.dpi'] = 200
+import mat73
 
 #data
-data_file = os.path.join('/Users/xinguofang/Documents/Research/TI-aware Clustering', 'binning', 'realtime_GT_imgs.mat')
-mat = scipy.io.loadmat(data_file)
-data = mat['Phi_rt_init'] 
-data_real = data.real
-data_imag = data.imag
-data_con = np.concatenate((data_real, data_imag))
-data_con = data_con.transpose()
-data = torch.from_numpy(data_con).float()
+recon_output = np.load('/home/xfang/projects/vae_temporal_analysis/assets/recon_output_CVAEBPHT_wo_eddy.npy')
+recon_output_ec = np.load('/home/xfang/projects/vae_temporal_analysis/assets/recon_output_CVAEBPHT_w_eddy.npy')
+mat_data = mat73.loadmat('/home/xfang/projects/CVAE_SMS/data_test/ExtractToPython_patient.mat')
+mat_data =mat_data['ExtractToPython']
+Phi_rt_init = mat_data['Phi_rt_small']
+Phi_rt_init = Phi_rt_init / Phi_rt_init[:,0].std() 
+Phi_rt_init_real = Phi_rt_init.real
+Phi_rt_init_imag = Phi_rt_init.imag
+Phi_rt_init_con = np.concatenate((Phi_rt_init_real, Phi_rt_init_imag))
+Phi_rt_init_con = Phi_rt_init_con.transpose()
+
+# output plots
+fig, axs = plt.subplots(4, 2, figsize=(20, 20))
+axs = axs.flatten()  # Flatten the 2x2 array of axes for easy indexing
+for i in range(4):
+    axs[i].plot(Phi_rt_init_con[:1800, i], label = f'Phi_rt_init Col {i+1}')
+    axs[i].plot(recon_output_ec[:1800, i], label = f'Recon_output w/eddy current Col {i+1}')
+    axs[i].legend(loc="upper right")
+for i in range(4):
+    axs[i+4].plot(Phi_rt_init_con[:1800, i], label=f'Phi_rt_init Col {i+1}')
+    axs[i+4].plot(recon_output[:1800, i], label=f'Recon_output Col {i+1}')
+    axs[i+4].legend(loc="upper right")
+plt.tight_layout()
+fig.savefig('/home/xfang/Data/ISMRM25/Eddy_Current_Correction.png')
 
 
-
-seg_file = os.path.join('/Users/xinguofang/Documents/Research/TI-aware Clustering', 'binning', 'TI.mat')
-segidx = scipy.io.loadmat(seg_file)
-segidx = segidx['Segidx']
-# segidx_mu = (segidx - segidx.mean())/segidx.std()
-
-binning_file = os.path.join('/Users/xinguofang/Documents/Research/TI-aware Clustering', 'binning', 'binning_GT.mat')
-binning_file = scipy.io.loadmat(binning_file)
-hidx = binning_file['Hidx'] # Cardiac
-ridx = binning_file['Ridx'] # Respiratory
-ridx_mu = (ridx - ridx.mean())/ridx.std()
-hidx_mu = (hidx - hidx.mean())/hidx.std()
-hidx_sin = np.sin(hidx*2*np.pi/20)
-hidx_cos = np.cos(hidx*2*np.pi/20)
-
-array_1 = np.ones(360)
-array_2 = 2 * array_1
-array_3 = 3 * array_1
-array_4 = 4 * array_1
-array_5 = 5 * array_1
-array = np.concatenate((array_1, array_2, array_3),axis=0)
-array = np.concatenate((array, array_4, array_5),axis=0)
-array = np.tile(array, 7)
-
-Ti = segidx*2*3.56e-3
-T1 = 1.2
-Tr = 3.56e-3
-alpha = 5*np.pi/180
-T1_star = 1/(1/T1 - np.log(np.cos(alpha))/Tr)
-u1 = 1 - 2 * np.exp(-Ti/T1_star)
-
-# create ramp matrix
-array_1 = np.ones(360)
-array_2 = 2 * array_1
-array_3 = 3 * array_1
-array_4 = 4 * array_1
-array_5 = 5 * array_1
-array = np.concatenate((array_1, array_2, array_3),axis=0)
-array = np.concatenate((array, array_4, array_5),axis=0)
-wall_clock = np.tile(array, 7)
-
-tau = (wall_clock - 1) * 15e-3
-T2 = 50e-3
-u2 = np.exp(-tau/T2)
-
-# plt.plot(u1)
-# plt.xlim(0,1800)
-# plt.show()
-
-wall_clock_mu = (wall_clock-wall_clock.mean())/wall_clock.std()
-segidx_mu = (segidx-segidx.mean())/segidx.std()
-
-# filtered_ridx_mu = (filtered_ridx - filtered_ridx.mean())/filtered_ridx.std()
-
-u1_normalized = (u1 - u1.mean())/u1.std()
-u2_normalized = (u2 - u2.mean())/u2.std()
 
 # # time domain plot
 # plt.figure(1)
@@ -143,14 +104,6 @@ u2_normalized = (u2 - u2.mean())/u2.std()
 
 # plt.tight_layout()
 # plt.savefig('/Users/xinguofang/Documents/Research/TI-aware Clustering/input_signal_motion.png')
-
-
-train_losses = np.load('train_losses_6.npy')
-plt.plot(train_losses)
-plt.show()
-
-
-
 
 # u1_normalized = torch.from_numpy(u1_normalized)
 # u2_normalized = torch.from_numpy(u2_normalized)
