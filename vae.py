@@ -1,13 +1,14 @@
-import torch; 
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils
 import torch.distributions
 import numpy as np
 
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
-#phi_rt_init -- encoder (mlp) --- latent_dim --- decoder(mlp) --- phi_hat
+
+# phi_rt_init -- encoder (mlp) --- latent_dim --- decoder(mlp) --- phi_hat
 class Encoder(nn.Module):
     def __init__(self, latent_dims):
         super(Encoder, self).__init__()
@@ -36,31 +37,33 @@ class Encoder(nn.Module):
         x = F.relu(self.linear2(x))
         x = F.relu(self.linear3(x))
         x = F.relu(self.linear4(x))
-        mu =  self.linear5(x)
+        mu = self.linear5(x)
         var = self.linear6(x)
         sigma = torch.exp(var)
-        z = mu + sigma*self.N.sample(mu.shape)
-        self.kl = (sigma**2 + mu**2 - torch.log(sigma) - 1/2).sum()
+        z = mu + sigma * self.N.sample(mu.shape)
+        self.kl = (sigma**2 + mu**2 - torch.log(sigma) - 1 / 2).sum()
         return mu, var
-          
+
+
 class Decoder(nn.Module):
     def __init__(self, latent_dims):
         super(Decoder, self).__init__()
         self.layers = nn.Sequential(
-            nn.Linear(latent_dims,70),
+            nn.Linear(latent_dims, 70),
             nn.ReLU(),
-            nn.Linear(70,100),
+            nn.Linear(70, 100),
             nn.ReLU(),
-            nn.Linear(100,50),
+            nn.Linear(100, 50),
             nn.ReLU(),
             nn.Linear(50, 25),
             nn.ReLU(),
-            nn.Linear(25, 96)
+            nn.Linear(25, 96),
         )
 
     def forward(self, z):
         return self.layers(z)
-    
+
+
 class VariationalAutoencoder(nn.Module):
     def __init__(self, latent_dims):
         super(VariationalAutoencoder, self).__init__()
@@ -70,15 +73,3 @@ class VariationalAutoencoder(nn.Module):
     def forward(self, x):
         z = self.encoder(x)
         return self.decoder(z)
-    
-
-
-
-  
-    
-
-    
-
-    
-
-

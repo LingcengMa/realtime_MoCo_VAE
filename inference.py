@@ -1,6 +1,8 @@
 import os
 import sys
-import torch; torch.manual_seed(0)
+import torch
+
+torch.manual_seed(0)
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset
@@ -13,66 +15,69 @@ import torchvision
 import mat73
 import numpy as np
 import scipy
-import matplotlib.pyplot as plt; plt.rcParams['figure.dpi'] = 200
+import matplotlib.pyplot as plt
+
+plt.rcParams["figure.dpi"] = 200
 from sklearn.feature_selection import mutual_info_regression
 import scipy.stats as stats
 import statsmodels.api as sm
 from scipy.interpolate import CubicSpline
 from scipy.io import savemat
+
 torch.autograd.set_detect_anomaly(True)
 
-#Configuration
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
+# Configuration
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
 path = os.path.dirname(os.path.realpath(__file__))
 
-if False: #to improve: do this with a flag
-    data_file = os.path.join(data_folder, 'realtime_GT_imgs.mat')
+if False:  # to improve: do this with a flag
+    data_file = os.path.join(data_folder, "realtime_GT_imgs.mat")
     mat = scipy.io.loadmat(data_file)
-    Phi_rt_init = mat['Phi_rt_init'] 
-else :
+    Phi_rt_init = mat["Phi_rt_init"]
+else:
     # data_file = '/home/xfang/Data/stemberg_donna/ExtractToPython.mat'
-    data_file = 'cine_data/ExtractToPython_GRE.mat'
+    data_file = "cine_data/ExtractToPython_GRE.mat"
     mat = mat73.loadmat(data_file)
-    mat_data =mat['ExtractToPython']
-    Phi_rt_init = mat_data['Phi_rt_small']
-    Segidx = mat_data['Segidx'].reshape(-1, 1)
-    wallClock = mat_data['wallClock'].reshape(-1, 1)
-    flipAngles = mat_data['flipAngle'].reshape(-1, 1)
-    thetas = mat_data['thetas'].reshape(-1, 1)
-    
-    Phi_rt_init = Phi_rt_init / Phi_rt_init[:,0].std() #Normalize whole
+    mat_data = mat["ExtractToPython"]
+    Phi_rt_init = mat_data["Phi_rt_small"]
+    Segidx = mat_data["Segidx"].reshape(-1, 1)
+    wallClock = mat_data["wallClock"].reshape(-1, 1)
+    flipAngles = mat_data["flipAngle"].reshape(-1, 1)
+    thetas = mat_data["thetas"].reshape(-1, 1)
+
+    Phi_rt_init = Phi_rt_init / Phi_rt_init[:, 0].std()  # Normalize whole
     # Phi_rt_init = (Phi_rt_init - Phi_rt_init.mean(axis=1, keepdims=True)) / Phi_rt_init.std(axis=1, keepdims=True) #Normalize each feature
     Phi_rt_init_real = Phi_rt_init.real
     Phi_rt_init_imag = Phi_rt_init.imag
     Phi_rt_init_con = np.concatenate((Phi_rt_init_real, Phi_rt_init_imag))
     Phi_rt_init_con = Phi_rt_init_con.transpose()
     Phi_rt_init = torch.from_numpy(Phi_rt_init_con).float().to(device)
-    thetas_mu = (thetas - thetas.mean())/thetas.std()
+    thetas_mu = (thetas - thetas.mean()) / thetas.std()
     thetas_mu = torch.from_numpy(thetas_mu).to(device).to(torch.float32)
     theta0 = torch.zeros_like(thetas_mu)
-    
+
 feature_size = Phi_rt_init.size()[1]
-model = CVAE_BP_HT(feature_size, latent_dims = 2, class_size = 1).to(device)
-model.load_state_dict(torch.load('cine_models/model_ExtractToPython_GRE.pth'))
+model = CVAE_BP_HT(feature_size, latent_dims=2, class_size=1).to(device)
+model.load_state_dict(torch.load("cine_models/model_ExtractToPython_GRE.pth"))
 
 recon_output_ec, latent_space_mu, latent_space_logvar = model(Phi_rt_init, thetas_mu)
-recon_output = model.decode(latent_space_mu, theta0).to('cpu').detach().numpy()
+recon_output = model.decode(latent_space_mu, theta0).to("cpu").detach().numpy()
 print(recon_output.shape)
 latent_space_mu_card_full = latent_space_mu
-latent_space = model.reparameterize(latent_space_mu,latent_space_logvar)
-latent_space = latent_space.to('cpu').detach().numpy()
-latent_space_mu = latent_space_mu.to('cpu').detach().numpy()
-np.save('./cine_data/latent_GRE.npy', latent_space_mu)
+latent_space = model.reparameterize(latent_space_mu, latent_space_logvar)
+latent_space = latent_space.to("cpu").detach().numpy()
+latent_space_mu = latent_space_mu.to("cpu").detach().numpy()
+np.save("./cine_data/latent_GRE.npy", latent_space_mu)
 savemat("/home/xfang/Data/cine_data/latent_GRE.mat", {"latent": latent_space_mu})
 
-# plot the distribution of latent space 
-resp = latent_space[:,0]
-fig1 = plt.hist(resp, bins=100, edgecolor='black')
-plt.title('Respiratory Distribution')
-plt.xlabel('Value')
-plt.ylabel('Frequency')
-plt.savefig('./cine_plots/resp_distribution_GRE.png')
+# plot the distribution of latent space
+resp = latent_space[:, 0]
+fig1 = plt.hist(resp, bins=100, edgecolor="black")
+plt.title("Respiratory Distribution")
+plt.xlabel("Value")
+plt.ylabel("Frequency")
+plt.savefig("./cine_plots/resp_distribution_GRE.png")
 
 # end of espiration at -0.25
 resp0 = -0.3076
@@ -81,38 +86,58 @@ expiration_end = -0.25
 inspiration_end = 0.25
 resp_phase = 20
 
-card_average_GRE = np.load('./assets/card_average_GRE.npy')
+card_average_GRE = np.load("./assets/card_average_GRE.npy")
 
-card_interp = CubicSpline(card_average_GRE[:,0], card_average_GRE[:,1])
+card_interp = CubicSpline(card_average_GRE[:, 0], card_average_GRE[:, 1])
 num_card_phase = 100
-card_phase = np.linspace(cardiac0, cardiac0+2*np.pi, num_card_phase)
+card_phase = np.linspace(cardiac0, cardiac0 + 2 * np.pi, num_card_phase)
 amplitude = card_interp(card_phase)
 
 # pause respiratory
 latent_space_mu_card = torch.ones(num_card_phase, 3).to(device)
-latent_space_mu_card[:,0] = resp0 * latent_space_mu_card[:,0]
-latent_space_mu_card[:,1] = torch.from_numpy(amplitude * np.cos(card_phase))
-latent_space_mu_card[:,2] = torch.from_numpy(amplitude * np.sin(card_phase))
-recon_output_card = model.decode(latent_space_mu_card, theta0[:num_card_phase, :]).to('cpu').detach().numpy() #NO REPARAMETERIZATION
-latent_space_mu_card_full[:,0] = resp0*torch.ones_like(latent_space_mu_card_full[:,0])
-recon_output_card_full = model.decode(latent_space_mu_card_full, theta0).to('cpu').detach().numpy() #NO REPARAMETERIZATION
+latent_space_mu_card[:, 0] = resp0 * latent_space_mu_card[:, 0]
+latent_space_mu_card[:, 1] = torch.from_numpy(amplitude * np.cos(card_phase))
+latent_space_mu_card[:, 2] = torch.from_numpy(amplitude * np.sin(card_phase))
+recon_output_card = (
+    model.decode(latent_space_mu_card, theta0[:num_card_phase, :])
+    .to("cpu")
+    .detach()
+    .numpy()
+)  # NO REPARAMETERIZATION
+latent_space_mu_card_full[:, 0] = resp0 * torch.ones_like(
+    latent_space_mu_card_full[:, 0]
+)
+recon_output_card_full = (
+    model.decode(latent_space_mu_card_full, theta0).to("cpu").detach().numpy()
+)  # NO REPARAMETERIZATION
 
 # pause cardiac
 latent_space_mu_resp = torch.ones(resp_phase, 3).to(device)
-latent_space_mu_resp[:,1] = torch.from_numpy(card_interp(0)*np.ones(resp_phase))
-latent_space_mu_resp[:,2] = torch.zeros(resp_phase)
-latent_space_mu_resp[:,0] = torch.linspace(inspiration_end, expiration_end, resp_phase)
-recon_output_resp = model.decode(latent_space_mu_resp, theta0[:resp_phase, :]).to('cpu').detach().numpy() #NO REPARAMETERIZATION
+latent_space_mu_resp[:, 1] = torch.from_numpy(card_interp(0) * np.ones(resp_phase))
+latent_space_mu_resp[:, 2] = torch.zeros(resp_phase)
+latent_space_mu_resp[:, 0] = torch.linspace(inspiration_end, expiration_end, resp_phase)
+recon_output_resp = (
+    model.decode(latent_space_mu_resp, theta0[:resp_phase, :])
+    .to("cpu")
+    .detach()
+    .numpy()
+)  # NO REPARAMETERIZATION
 
-savemat("/home/xfang/Data/cine_data/GRE.mat", {"resp": recon_output_resp, "card": recon_output_card, "realtime": recon_output, "card_full": recon_output_card_full})
-
-
+savemat(
+    "/home/xfang/Data/cine_data/GRE.mat",
+    {
+        "resp": recon_output_resp,
+        "card": recon_output_card,
+        "realtime": recon_output,
+        "card_full": recon_output_card_full,
+    },
+)
 
 
 ### pause respiratory ###
 
-if False: #to improve: do this with a flag
-    Phi_rt_init = Phi_rt_init / Phi_rt_init[:,0].std() #Normalize whole
+if False:  # to improve: do this with a flag
+    Phi_rt_init = Phi_rt_init / Phi_rt_init[:, 0].std()  # Normalize whole
     # Phi_rt_init = (Phi_rt_init - Phi_rt_init.mean(axis=1, keepdims=True)) / Phi_rt_init.std(axis=1, keepdims=True) #Normalize each feature
     Phi_rt_init_real = Phi_rt_init.real
     Phi_rt_init_imag = Phi_rt_init.imag
@@ -120,21 +145,27 @@ if False: #to improve: do this with a flag
     Phi_rt_init_con = Phi_rt_init_con.transpose()
     Phi_rt_init = torch.from_numpy(Phi_rt_init_con).float().to(device)
 
-    Segidx_mu = (Segidx - Segidx.mean())/Segidx.std()
-    wallClock_mu = (wallClock - wallClock.mean())/wallClock.std()
-    thetas_mu = (thetas - thetas.mean())/thetas.std()
-    flipAngles_mu = (flipAngles - flipAngles.mean())/flipAngles.std()
+    Segidx_mu = (Segidx - Segidx.mean()) / Segidx.std()
+    wallClock_mu = (wallClock - wallClock.mean()) / wallClock.std()
+    thetas_mu = (thetas - thetas.mean()) / thetas.std()
+    flipAngles_mu = (flipAngles - flipAngles.mean()) / flipAngles.std()
     wallClock_mu = torch.from_numpy(wallClock_mu).to(device)
-    Segidx_mu  = torch.from_numpy(Segidx_mu).to(device)
+    Segidx_mu = torch.from_numpy(Segidx_mu).to(device)
     thetas_mu = torch.from_numpy(thetas_mu).to(device)
     flipAngles_mu = torch.from_numpy(flipAngles_mu).to(device)
     theta0 = torch.zeros_like(thetas_mu)
     t1t2_normalized = torch.cat([Segidx_mu, wallClock_mu], dim=1).to(torch.float32)
     t1t2theta = torch.cat([Segidx_mu, wallClock_mu, thetas_mu], dim=1).to(torch.float32)
-    t1t2theta0 = torch.cat([Segidx_mu, wallClock_mu, theta0], dim=1).to(torch.float32) 
-    t1t2fa = torch.cat([Segidx_mu, wallClock_mu, flipAngles_mu], dim=1).to(torch.float32)
-    t1t2fatheta = torch.cat([Segidx_mu, wallClock_mu, flipAngles_mu, thetas_mu], dim=1).to(torch.float32)
-    t1t2fatheta0 = torch.cat([Segidx_mu, wallClock_mu, flipAngles_mu, theta0], dim=1).to(torch.float32)
+    t1t2theta0 = torch.cat([Segidx_mu, wallClock_mu, theta0], dim=1).to(torch.float32)
+    t1t2fa = torch.cat([Segidx_mu, wallClock_mu, flipAngles_mu], dim=1).to(
+        torch.float32
+    )
+    t1t2fatheta = torch.cat(
+        [Segidx_mu, wallClock_mu, flipAngles_mu, thetas_mu], dim=1
+    ).to(torch.float32)
+    t1t2fatheta0 = torch.cat(
+        [Segidx_mu, wallClock_mu, flipAngles_mu, theta0], dim=1
+    ).to(torch.float32)
 
     class_size = 4
     latent_dims = 2
@@ -143,66 +174,75 @@ if False: #to improve: do this with a flag
     model = CVAE_BP_HT(feature_size, latent_dims, class_size).to(device)
     optimizer = optim.Adam(model.parameters(), lr=1e-2)
 
-    model_folder = os.path.join(path, 'models')
-    data_folder = os.path.join(path, 'data')
-    output_folder = './SMS_plots'
+    model_folder = os.path.join(path, "models")
+    data_folder = os.path.join(path, "data")
+    output_folder = "./SMS_plots"
 
     # Check if the 'plots' folder exists, if not, create it
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
-    for file_name in os.listdir(data_folder): 
-        
+    for file_name in os.listdir(data_folder):
+
         data_path = os.path.join(data_folder, file_name)
         mat = mat73.loadmat(data_file)
-        mat_data =mat['ExtractToPython']
-        Phi_rt_init = mat_data['Phi_rt_small']
-        Phi_rt_init = Phi_rt_init / Phi_rt_init[:,0].std() #Normalize whole
+        mat_data = mat["ExtractToPython"]
+        Phi_rt_init = mat_data["Phi_rt_small"]
+        Phi_rt_init = Phi_rt_init / Phi_rt_init[:, 0].std()  # Normalize whole
         # Phi_rt_init = (Phi_rt_init - Phi_rt_init.mean(axis=1, keepdims=True)) / Phi_rt_init.std(axis=1, keepdims=True) #Normalize each feature
         Phi_rt_init_real = Phi_rt_init.real
         Phi_rt_init_imag = Phi_rt_init.imag
         Phi_rt_init_con = np.concatenate((Phi_rt_init_real, Phi_rt_init_imag))
         Phi_rt_init_con = Phi_rt_init_con.transpose()
         Phi_rt_init = torch.from_numpy(Phi_rt_init_con).float().to(device)
-        
-        model_path = os.path.join(model_folder, f'model_{file_name}.pth')
+
+        model_path = os.path.join(model_folder, f"model_{file_name}.pth")
         model.load_state_dict(torch.load(model_path))
-        recon_output_ec, latent_space_mu, latent_space_logvar = model(Phi_rt_init, t1t2fatheta)
-        recon_output_ec = recon_output_ec.to('cpu').detach().numpy() # w/ eddy current
-        recon_output = model.decode(latent_space_mu, t1t2fatheta0) #NO REPARAMETERIZATION
-        recon_output = recon_output.to('cpu').detach().numpy()
-        latent_space = model.reparameterize(latent_space_mu,latent_space_logvar)
-        latent_space = latent_space.to('cpu').detach().numpy()
-        latent_space_mu = latent_space_mu.to('cpu').detach().numpy()
-        
+        recon_output_ec, latent_space_mu, latent_space_logvar = model(
+            Phi_rt_init, t1t2fatheta
+        )
+        recon_output_ec = recon_output_ec.to("cpu").detach().numpy()  # w/ eddy current
+        recon_output = model.decode(
+            latent_space_mu, t1t2fatheta0
+        )  # NO REPARAMETERIZATION
+        recon_output = recon_output.to("cpu").detach().numpy()
+        latent_space = model.reparameterize(latent_space_mu, latent_space_logvar)
+        latent_space = latent_space.to("cpu").detach().numpy()
+        latent_space_mu = latent_space_mu.to("cpu").detach().numpy()
+
         # output plots
         fig1, axs1 = plt.subplots(4, 2, figsize=(10, 10))
         axs1 = axs1.flatten()  # Flatten the 2x2 array of axes for easy indexing
         for i in range(4):
-            axs1[i].plot(Phi_rt_init[:3600, i].cpu(), label = f'Phi_rt_init Col {i+1}')
-            axs1[i].plot(recon_output_ec[:3600, i], label = f'Recon_output w/eddy current Col {i+1}')
+            axs1[i].plot(Phi_rt_init[:3600, i].cpu(), label=f"Phi_rt_init Col {i+1}")
+            axs1[i].plot(
+                recon_output_ec[:3600, i],
+                label=f"Recon_output w/eddy current Col {i+1}",
+            )
             axs1[i].legend(loc="upper right")
         for i in range(4):
-            axs1[i+4].plot(Phi_rt_init[:3600, i].cpu(), label=f'Phi_rt_init Col {i+1}')
-            axs1[i+4].plot(recon_output[:3600, i], label=f'Recon_output Col {i+1}')
-            axs1[i+4].legend(loc="upper right")
+            axs1[i + 4].plot(
+                Phi_rt_init[:3600, i].cpu(), label=f"Phi_rt_init Col {i+1}"
+            )
+            axs1[i + 4].plot(recon_output[:3600, i], label=f"Recon_output Col {i+1}")
+            axs1[i + 4].legend(loc="upper right")
         plt.tight_layout()
-        fig1.savefig(os.path.join(output_folder, f'{file_name}_recon_output.png'))
+        fig1.savefig(os.path.join(output_folder, f"{file_name}_recon_output.png"))
         # latent vectors
         fig2, axs2 = plt.subplots(2, 3, figsize=(10, 10))
         axs2 = axs2.flatten()  # Flatten the 2x2 array of axes for easy indexing
         for i in range(3):
-            axs2[i].plot(latent_space_mu[:3600, i], label=f'Latent vector {i+1}')
+            axs2[i].plot(latent_space_mu[:3600, i], label=f"Latent vector {i+1}")
             axs2[i].legend(loc="upper right")
-        axs2[3].plot(Segidx[:3600], label='Segidx')
+        axs2[3].plot(Segidx[:3600], label="Segidx")
         axs2[3].legend(loc="upper right")
-        axs2[4].plot(wallClock[:3600], label='T2prep index')
+        axs2[4].plot(wallClock[:3600], label="T2prep index")
         axs2[4].legend(loc="upper right")
-        axs2[5].plot(flipAngles[:3600], label='Flip Angles')
+        axs2[5].plot(flipAngles[:3600], label="Flip Angles")
         axs2[5].legend(loc="upper right")
         plt.tight_layout()
-        fig2.savefig(os.path.join(output_folder, f'{file_name}_latent_vector.png'))
-    
+        fig2.savefig(os.path.join(output_folder, f"{file_name}_latent_vector.png"))
+
 
 # latent_space_mu, latent_space_logvar = model.encode(Phi_rt_init, t1t2fatheta)
 # latent_space = model.reparameterize(latent_space_mu,latent_space_logvar)
@@ -320,5 +360,3 @@ if False: #to improve: do this with a flag
 # # latent_space_mu_resp_phase = model.reparameterize(latent_space_mu_resp_phase,latent_space_logvar[:resp_phase, :])
 # # latent_space_mu_resp_phase = latent_space_mu_resp_phase.to('cpu').detach().numpy()
 # # np.save('./SMS/latent_space_mu_resp_0528_run1.npy', latent_space_mu_resp_phase)
-
-

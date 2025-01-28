@@ -1,5 +1,7 @@
 import os
-import torch; torch.manual_seed(0)
+import torch
+
+torch.manual_seed(0)
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils
@@ -8,16 +10,24 @@ from vae import VariationalAutoencoder
 import torchvision
 import numpy as np
 import scipy
-import matplotlib.pyplot as plt; plt.rcParams['figure.dpi'] = 200
+import matplotlib.pyplot as plt
+
+plt.rcParams["figure.dpi"] = 200
 import mat73
 
-#data
-recon_output = np.load('/home/xfang/projects/vae_temporal_analysis/assets/recon_output_CVAEBPHT_wo_eddy.npy')
-recon_output_ec = np.load('/home/xfang/projects/vae_temporal_analysis/assets/recon_output_CVAEBPHT_w_eddy.npy')
-mat_data = mat73.loadmat('/home/xfang/projects/CVAE_SMS/data_test/ExtractToPython_patient.mat')
-mat_data =mat_data['ExtractToPython']
-Phi_rt_init = mat_data['Phi_rt_small']
-Phi_rt_init = Phi_rt_init / Phi_rt_init[:,0].std() 
+# data
+recon_output = np.load(
+    "/home/xfang/projects/vae_temporal_analysis/assets/recon_output_CVAEBPHT_wo_eddy.npy"
+)
+recon_output_ec = np.load(
+    "/home/xfang/projects/vae_temporal_analysis/assets/recon_output_CVAEBPHT_w_eddy.npy"
+)
+mat_data = mat73.loadmat(
+    "/home/xfang/projects/CVAE_SMS/data_test/ExtractToPython_patient.mat"
+)
+mat_data = mat_data["ExtractToPython"]
+Phi_rt_init = mat_data["Phi_rt_small"]
+Phi_rt_init = Phi_rt_init / Phi_rt_init[:, 0].std()
 Phi_rt_init_real = Phi_rt_init.real
 Phi_rt_init_imag = Phi_rt_init.imag
 Phi_rt_init_con = np.concatenate((Phi_rt_init_real, Phi_rt_init_imag))
@@ -27,16 +37,17 @@ Phi_rt_init_con = Phi_rt_init_con.transpose()
 fig, axs = plt.subplots(4, 2, figsize=(20, 20))
 axs = axs.flatten()  # Flatten the 2x2 array of axes for easy indexing
 for i in range(4):
-    axs[i].plot(Phi_rt_init_con[:1800, i], label = f'Phi_rt_init Col {i+1}')
-    axs[i].plot(recon_output_ec[:1800, i], label = f'Recon_output w/eddy current Col {i+1}')
+    axs[i].plot(Phi_rt_init_con[:1800, i], label=f"Phi_rt_init Col {i+1}")
+    axs[i].plot(
+        recon_output_ec[:1800, i], label=f"Recon_output w/eddy current Col {i+1}"
+    )
     axs[i].legend(loc="upper right")
 for i in range(4):
-    axs[i+4].plot(Phi_rt_init_con[:1800, i], label=f'Phi_rt_init Col {i+1}')
-    axs[i+4].plot(recon_output[:1800, i], label=f'Recon_output Col {i+1}')
-    axs[i+4].legend(loc="upper right")
+    axs[i + 4].plot(Phi_rt_init_con[:1800, i], label=f"Phi_rt_init Col {i+1}")
+    axs[i + 4].plot(recon_output[:1800, i], label=f"Recon_output Col {i+1}")
+    axs[i + 4].legend(loc="upper right")
 plt.tight_layout()
-fig.savefig('/home/xfang/Data/ISMRM25/Eddy_Current_Correction.png')
-
+fig.savefig("/home/xfang/Data/ISMRM25/Eddy_Current_Correction.png")
 
 
 # # time domain plot
@@ -229,10 +240,6 @@ fig.savefig('/home/xfang/Data/ISMRM25/Eddy_Current_Correction.png')
 # plt.savefig('/Users/xinguofang/Documents/Research/TI-aware Clustering/scatter_NT1_LT2_CosSine.png')
 
 
-
-
-
-
 # plt.figure(2)
 # plt.scatter(array, latent_4[:,3], marker='o', s=3, color='blue', alpha=0.5)
 # plt.ylabel('Latent Vector 4')
@@ -266,9 +273,6 @@ fig.savefig('/home/xfang/Data/ISMRM25/Eddy_Current_Correction.png')
 # # plt.show()
 
 
-
-
-
 # plt.scatter(ridx_mu, latent_2[:,0], marker='o', s=3, color='blue', alpha=0.5)
 # plt.ylabel('Latent Vector 1')
 # plt.xlabel('ridx')
@@ -290,13 +294,6 @@ fig.savefig('/home/xfang/Data/ISMRM25/Eddy_Current_Correction.png')
 # plt.xlim(-2,2)
 # plt.xlabel('Frequency')
 # plt.savefig('/Users/xinguofang/Documents/Research/TI-aware Clustering/latent_2_k_1_5_fft1.png')
-
-
-
-
-
-
-
 
 
 # plt.scatter(segidx, latent_1, marker='o', s=3, color='blue', alpha=0.5)
@@ -325,7 +322,7 @@ fig.savefig('/home/xfang/Data/ISMRM25/Eddy_Current_Correction.png')
 # plt.xlabel('Ridx')
 # plt.savefig('/Users/xinguofang/Documents/Research/TI-aware Clustering/latent_1_1dim_Ridx_hist.png')
 
- 
+
 # plt.scatter(ridx, latent_3[:,0], marker='o', s=3, color='blue', alpha=0.5)
 # plt.ylabel('Latent Vector 1')
 # plt.xlabel('Ridx')
@@ -369,7 +366,7 @@ fig.savefig('/home/xfang/Data/ISMRM25/Eddy_Current_Correction.png')
 # plt.ylabel('Amplitude')
 # plt.show()
 
-# 
+#
 # plt.subplot(3,1,1)
 # plt.scatter(segidx, latent_3[:,0], marker='o', s=3, color='blue', alpha=0.5)
 # plt.ylabel('Latent Vector 1')
@@ -411,7 +408,7 @@ fig.savefig('/home/xfang/Data/ISMRM25/Eddy_Current_Correction.png')
 # plt.tight_layout()
 # plt.savefig('/Users/xinguofang/Documents/Research/TI-aware Clustering/latent_23_3dim.png')
 
-# # 
+# #
 # fft_segidx = np.fft.fft(segidx,axis=0)
 # fft_ridx = np.fft.fft(ridx,axis=0)
 # fft_hidx = np.fft.fft(hidx,axis=0)
@@ -460,7 +457,3 @@ fig.savefig('/home/xfang/Data/ISMRM25/Eddy_Current_Correction.png')
 # plt.ylabel('Loss')
 # plt.legend()
 # plt.show()
-
-
-
-

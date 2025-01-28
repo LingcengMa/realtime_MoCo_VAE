@@ -1,5 +1,7 @@
 import os
-import torch; torch.manual_seed(0)
+import torch
+
+torch.manual_seed(0)
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils
@@ -11,26 +13,34 @@ from model import VAE
 import torchvision
 import numpy as np
 import scipy
-import matplotlib.pyplot as plt; plt.rcParams['figure.dpi'] = 200
+import matplotlib.pyplot as plt
+
+plt.rcParams["figure.dpi"] = 200
 from torch.utils.tensorboard import SummaryWriter
 
-#Configuration
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
+# Configuration
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
-#data
-data_file = os.path.join('/Users/xinguofang/Documents/Research/TI-aware Clustering', 'binning', 'realtime_GT_imgs.mat')
+# data
+data_file = os.path.join(
+    "/Users/xinguofang/Documents/Research/TI-aware Clustering",
+    "binning",
+    "realtime_GT_imgs.mat",
+)
 mat = scipy.io.loadmat(data_file)
-data = mat['Phi_rt_init'] 
+data = mat["Phi_rt_init"]
 data_real = data.real
 data_imag = data.imag
 data_con = np.concatenate((data_real, data_imag))
 data_con = data_con.transpose()
 data = torch.from_numpy(data_con).float()
 
-#data_feature
-data_file= os.path.join('/Users/xinguofang/Documents/Research/TI-aware Clustering', 'binning', 'feature.mat')
+# data_feature
+data_file = os.path.join(
+    "/Users/xinguofang/Documents/Research/TI-aware Clustering", "binning", "feature.mat"
+)
 mat = scipy.io.loadmat(data_file)
-Phi_rt_feature = mat['Phi_rt_feature'] 
+Phi_rt_feature = mat["Phi_rt_feature"]
 Phi_rt_feature_real = Phi_rt_feature.real
 Phi_rt_feature_imag = Phi_rt_feature.imag
 Phi_rt_feature_con = np.concatenate((Phi_rt_feature_real, Phi_rt_feature_imag))
@@ -39,18 +49,24 @@ Phi_rt_feature = torch.from_numpy(Phi_rt_feature_con).float()
 
 # print(data_con.shape)
 
-seg_file = os.path.join('/Users/xinguofang/Documents/Research/TI-aware Clustering', 'binning', 'TI.mat')
+seg_file = os.path.join(
+    "/Users/xinguofang/Documents/Research/TI-aware Clustering", "binning", "TI.mat"
+)
 segidx = scipy.io.loadmat(seg_file)
-segidx = segidx['Segidx']
+segidx = segidx["Segidx"]
 
-binning_file = os.path.join('/Users/xinguofang/Documents/Research/TI-aware Clustering', 'binning', 'binning_GT.mat')
+binning_file = os.path.join(
+    "/Users/xinguofang/Documents/Research/TI-aware Clustering",
+    "binning",
+    "binning_GT.mat",
+)
 binning_file = scipy.io.loadmat(binning_file)
-hidx = binning_file['Hidx'] # Cardiac
-ridx = binning_file['Ridx'] # Respiratory
+hidx = binning_file["Hidx"]  # Cardiac
+ridx = binning_file["Ridx"]  # Respiratory
 
 
-ridx_mu = (ridx - ridx.mean())/ridx.std()
-segidx_mu = (segidx - segidx.mean())/segidx.std()
+ridx_mu = (ridx - ridx.mean()) / ridx.std()
+segidx_mu = (segidx - segidx.mean()) / segidx.std()
 
 # create ramp matrix
 array_1 = np.ones(360)
@@ -58,55 +74,67 @@ array_2 = 2 * array_1
 array_3 = 3 * array_1
 array_4 = 4 * array_1
 array_5 = 5 * array_1
-array = np.concatenate((array_1, array_2, array_3),axis=0)
-array = np.concatenate((array, array_4, array_5),axis=0)
+array = np.concatenate((array_1, array_2, array_3), axis=0)
+array = np.concatenate((array, array_4, array_5), axis=0)
 array = np.tile(array, 7)
 
-ramp_latent_mu = (array-array.mean())/array.std()
+ramp_latent_mu = (array - array.mean()) / array.std()
 
 ramp_latent_mu = torch.from_numpy(ramp_latent_mu)
-segidx_mu  = torch.from_numpy(segidx_mu)
+segidx_mu = torch.from_numpy(segidx_mu)
 
 
 def train(autoencoder, data, epochs=20):
     opt = torch.optim.Adam(autoencoder.parameters())
     for epoch in range(epochs):
         for idx, x in enumerate(data):
-            x = x.to(device) 
+            x = x.to(device)
             opt.zero_grad()
-            x_hat = autoencoder(x,idx)
-            loss =  ((x - x_hat)**2).sum() + autoencoder.encoder.kl
-            MSELoss = ((x - x_hat)**2).sum()  
-            total = (x*x).sum()
+            x_hat = autoencoder(x, idx)
+            loss = ((x - x_hat) ** 2).sum() + autoencoder.encoder.kl
+            MSELoss = ((x - x_hat) ** 2).sum()
+            total = (x * x).sum()
             loss.backward()
             opt.step()
     return autoencoder, loss, MSELoss, total
+
 
 def train_2d(autoencoder, data, latent, k, epochs=20):
     opt = torch.optim.Adam(autoencoder.parameters())
     for epoch in range(epochs):
         for idx, x in enumerate(data):
-            x = x.to(device) 
+            x = x.to(device)
             opt.zero_grad()
             z = autoencoder.encoder(x)
             x_hat = autoencoder(x)
-            loss = ((x - x_hat)**2).sum() + autoencoder.encoder.kl + k * ((z[0] - latent[idx])**2).sum()  # L2 NORM (learned, latent one) 
+            loss = (
+                ((x - x_hat) ** 2).sum()
+                + autoencoder.encoder.kl
+                + k * ((z[0] - latent[idx]) ** 2).sum()
+            )  # L2 NORM (learned, latent one)
             loss.backward()
             opt.step()
     return autoencoder, loss
+
 
 def train_4d(autoencoder, data, para1, para2, m, n, epochs=20):
     opt = torch.optim.Adam(autoencoder.parameters())
     for epoch in range(epochs):
         for idx, x in enumerate(data):
-            x = x.to(device) 
+            x = x.to(device)
             opt.zero_grad()
             z = autoencoder.encoder(x)
             x_hat = autoencoder(x)
-            loss = ((x - x_hat)**2).sum() + autoencoder.encoder.kl + m * ((z[0] - para1[idx])**2).sum() + n * ((z[1] - para2[idx])**2).sum()
+            loss = (
+                ((x - x_hat) ** 2).sum()
+                + autoencoder.encoder.kl
+                + m * ((z[0] - para1[idx]) ** 2).sum()
+                + n * ((z[1] - para2[idx]) ** 2).sum()
+            )
             loss.backward()
             opt.step()
     return autoencoder, loss
+
 
 # vae1d = VariationalAutoencoder(latent_dims=1).to(device)
 # vae1d, loss1d = train(vae1d, data)
@@ -175,25 +203,19 @@ vae4d_hc_m = VariationalAutoencoder_hc_m(latent_dims=4).to(device)
 # np.save('latent_4d_hard_constraint.npy', latent_4d)
 
 
-
-vae4d_hc_m, loss4d_hc_m, MSELoss, total= train(vae4d_hc_m, data)
+vae4d_hc_m, loss4d_hc_m, MSELoss, total = train(vae4d_hc_m, data)
 print(loss4d_hc_m.item())
 print(MSELoss.item())
 print(total.item())
 latent_4d_m = torch.zeros(12600, 4)
 for idx, x in enumerate(data):
-   z, latent_4d_m[idx], log_var = vae4d_hc_m.encoder(x,idx)
-latent_4d_m = latent_4d_m.to('cpu').detach().numpy()
-np.save('latent_4d_hard_constraint_modified.npy', latent_4d_m)
-
-
-
-
-
+    z, latent_4d_m[idx], log_var = vae4d_hc_m.encoder(x, idx)
+latent_4d_m = latent_4d_m.to("cpu").detach().numpy()
+np.save("latent_4d_hard_constraint_modified.npy", latent_4d_m)
 
 
 # default `log_dir` is "runs" - we'll be more specific here
-writer = SummaryWriter('runs/experiment_1')
+writer = SummaryWriter("runs/experiment_1")
 # get some random training images
 dataiter = iter(trainloader)
 images, labels = next(dataiter)
@@ -205,4 +227,4 @@ img_grid = torchvision.utils.make_grid(images)
 matplotlib_imshow(img_grid, one_channel=True)
 
 # write to tensorboard
-writer.add_image('four_fashion_mnist_images', img_grid)
+writer.add_image("four_fashion_mnist_images", img_grid)

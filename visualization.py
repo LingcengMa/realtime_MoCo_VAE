@@ -1,14 +1,19 @@
 import os
-import torch; torch.manual_seed(0)
+import torch
+
+torch.manual_seed(0)
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils
 import torch.distributions
+
 # from models import VariationalAutoencoder_hc, VariationalAutoencoder_hc_m
 import torchvision
 import numpy as np
 import scipy
-import matplotlib.pyplot as plt; plt.rcParams['figure.dpi'] = 200
+import matplotlib.pyplot as plt
+
+plt.rcParams["figure.dpi"] = 200
 from network import CVAE_BP_HT
 from PIL import Image
 import cv2
@@ -17,22 +22,22 @@ import scipy.stats as stats
 import statsmodels.api as sm
 from scipy.interpolate import CubicSpline
 
-#Configuration
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
+# Configuration
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
 # video visualization
-latent_vector_GRE = np.load('./assets/ExtractToPython_GRE_latent_space.npy')
-latent_vector_FISP = np.load('./assets/ExtractToPython_TrueFisp_latent_space.npy')
+latent_vector_GRE = np.load("./assets/ExtractToPython_GRE_latent_space.npy")
+latent_vector_FISP = np.load("./assets/ExtractToPython_TrueFisp_latent_space.npy")
 
 plt.figure(figsize=(9, 9))
 plt.grid(True)
 plt.subplot(2, 1, 1)
 plt.plot(latent_vector_GRE[:100, 1])
-plt.title('Cardiac 1')
+plt.title("Cardiac 1")
 plt.subplot(2, 1, 2)
 plt.plot(latent_vector_GRE[:100, 2])
-plt.title('Cardiac 2')
-plt.savefig('./assets/latent_space_plot_GRE.png')
+plt.title("Cardiac 2")
+plt.savefig("./assets/latent_space_plot_GRE.png")
 
 # # cardiac circle
 # cardiac1 = latent_vector_GRE[:, 1]
@@ -65,85 +70,91 @@ if False:
 
     for i in range(150, 300):
         plt.figure(figsize=(9, 9))
-        
+
         # Plot the trajectory so far
-        plt.plot(cardiac1[150:i+1], cardiac2[150:i+1], 'b-', label='Trajectory')  # Trajectory in blue
-        
+        plt.plot(
+            cardiac1[150 : i + 1], cardiac2[150 : i + 1], "b-", label="Trajectory"
+        )  # Trajectory in blue
+
         # Plot the current position
-        plt.plot(cardiac1[i], cardiac2[i], 'ro', label='Current Position')  # Current position in red
-        
+        plt.plot(
+            cardiac1[i], cardiac2[i], "ro", label="Current Position"
+        )  # Current position in red
+
         # Set limits and labels
         plt.xlim(-1.5, 1.5)
         plt.ylim(-1.5, 1.5)
-        plt.xlabel('X')
-        plt.ylabel('Y')
-        
+        plt.xlabel("X")
+        plt.ylabel("Y")
+
         # Place axes at (0, 0)
         ax = plt.gca()
-        ax.spines['left'].set_position('zero')
-        ax.spines['bottom'].set_position('zero')
-        ax.spines['right'].set_color('none')
-        ax.spines['top'].set_color('none')
-        ax.xaxis.set_ticks_position('bottom')
-        ax.yaxis.set_ticks_position('left')
+        ax.spines["left"].set_position("zero")
+        ax.spines["bottom"].set_position("zero")
+        ax.spines["right"].set_color("none")
+        ax.spines["top"].set_color("none")
+        ax.xaxis.set_ticks_position("bottom")
+        ax.yaxis.set_ticks_position("left")
 
         # Show grid for better visualization (optional)
         plt.grid(True)
-        
+
         # Add legend
         plt.legend()
-        
+
         # Save the plot as an image in the list
-        plt.savefig(f'plot_{i}.png')
-        cardiac_trajectory.append(imageio.imread(f'plot_{i}.png'))
-        
+        plt.savefig(f"plot_{i}.png")
+        cardiac_trajectory.append(imageio.imread(f"plot_{i}.png"))
+
         plt.close()
-        
+
     # Create the GIF
-    imageio.mimsave('./assets/cardiac_trajectory_GRE.gif', cardiac_trajectory, duration=0.001)
+    imageio.mimsave(
+        "./assets/cardiac_trajectory_GRE.gif", cardiac_trajectory, duration=0.001
+    )
     plt.figure(figsize=(9, 9))
-    
+
     # Plot the trajectory so far
-    plt.plot(cardiac1[150:300], cardiac2[150:300], 'b-', label='Trajectory')  # Trajectory in blue
+    plt.plot(
+        cardiac1[150:300], cardiac2[150:300], "b-", label="Trajectory"
+    )  # Trajectory in blue
 
     # Generate points for the circle
     x = amplitude * np.cos(phase)
     y = amplitude * np.sin(phase)
 
     # Plot the circle
-    plt.plot(x, y, label='average cardiac cycle', color='red', linewidth=4)
+    plt.plot(x, y, label="average cardiac cycle", color="red", linewidth=4)
 
     # Set equal scaling so the circle isn't skewed
-    plt.gca().set_aspect('equal', adjustable='box')
+    plt.gca().set_aspect("equal", adjustable="box")
 
     # Set limits and labels
     plt.xlim(-1.5, 1.5)
     plt.ylim(-1.5, 1.5)
-    plt.xlabel('Cardiac 1')
-    plt.ylabel('Cardiac 2')
-        
+    plt.xlabel("Cardiac 1")
+    plt.ylabel("Cardiac 2")
+
     # Place axes at (0, 0)
     ax = plt.gca()
-    ax.spines['left'].set_position('zero')
-    ax.spines['bottom'].set_position('zero')
-    ax.spines['right'].set_color('none')
-    ax.spines['top'].set_color('none')
-    ax.xaxis.set_ticks_position('bottom')
-    ax.yaxis.set_ticks_position('left')
+    ax.spines["left"].set_position("zero")
+    ax.spines["bottom"].set_position("zero")
+    ax.spines["right"].set_color("none")
+    ax.spines["top"].set_color("none")
+    ax.xaxis.set_ticks_position("bottom")
+    ax.yaxis.set_ticks_position("left")
 
     # Show grid for better visualization (optional)
     plt.grid(True)
-        
+
     # Add legend
     plt.legend()
-        
-    # Save the plot as an image in the list
-    plt.savefig('plot_final.png')
 
-    for i in range(150,300):
-        os.remove(f'plot_{i}.png')
-    
-    
+    # Save the plot as an image in the list
+    plt.savefig("plot_final.png")
+
+    for i in range(150, 300):
+        os.remove(f"plot_{i}.png")
 
 
 # # cardiac circle
@@ -168,48 +179,54 @@ if False:
 
     for i in range(0, 988):
         plt.figure(figsize=(9, 9))
-        
+
         # Plot the trajectory so far
-        plt.plot(cardiac1[0:i+1], cardiac2[0:i+1], 'b-', label='Trajectory')  # Trajectory in blue
-        
+        plt.plot(
+            cardiac1[0 : i + 1], cardiac2[0 : i + 1], "b-", label="Trajectory"
+        )  # Trajectory in blue
+
         # Plot the current position
-        plt.plot(cardiac1[i], cardiac2[i], 'ro', label='Current Position')  # Current position in red
-        
+        plt.plot(
+            cardiac1[i], cardiac2[i], "ro", label="Current Position"
+        )  # Current position in red
+
         # Set limits and labels
         plt.xlim(-2, 2)
         plt.ylim(-2, 2)
-        plt.xlabel('X')
-        plt.ylabel('Y')
-        
+        plt.xlabel("X")
+        plt.ylabel("Y")
+
         # Place axes at (0, 0)
         ax = plt.gca()
-        ax.spines['left'].set_position('zero')
-        ax.spines['bottom'].set_position('zero')
-        ax.spines['right'].set_color('none')
-        ax.spines['top'].set_color('none')
-        ax.xaxis.set_ticks_position('bottom')
-        ax.yaxis.set_ticks_position('left')
+        ax.spines["left"].set_position("zero")
+        ax.spines["bottom"].set_position("zero")
+        ax.spines["right"].set_color("none")
+        ax.spines["top"].set_color("none")
+        ax.xaxis.set_ticks_position("bottom")
+        ax.yaxis.set_ticks_position("left")
 
         # Show grid for better visualization (optional)
         plt.grid(True)
-        
+
         # Add legend
         plt.legend()
-        
+
         # Save the plot as an image in the list
-        plt.savefig(f'plot_{i}.png')
-        cardiac_trajectory.append(imageio.imread(f'plot_{i}.png'))
-        
+        plt.savefig(f"plot_{i}.png")
+        cardiac_trajectory.append(imageio.imread(f"plot_{i}.png"))
+
         plt.close()
-        
+
     # Create the GIF
-    imageio.mimsave('./assets/cardiac_trajectory_FISP.gif', cardiac_trajectory, duration=0.001)
+    imageio.mimsave(
+        "./assets/cardiac_trajectory_FISP.gif", cardiac_trajectory, duration=0.001
+    )
     plt.figure(figsize=(9, 9))
 
-    
+
 # # Plot the trajectory so far
 # plt.plot(cardiac1[90:1800], cardiac2[90:1800], 'b-', label='Trajectory')  # Trajectory in blue
-    
+
 # # Plot the current position
 # plt.plot(cardiac1[1800], cardiac2[1800], 'ro', label='Current Position')  # Current position in red
 
@@ -231,7 +248,7 @@ if False:
 # plt.ylim(-7, 7)
 # plt.xlabel('X')
 # plt.ylabel('Y')
-    
+
 # # Place axes at (0, 0)
 # ax = plt.gca()
 # ax.spines['left'].set_position('zero')
@@ -243,10 +260,10 @@ if False:
 
 # # Show grid for better visualization (optional)
 # plt.grid(True)
-    
+
 # # Add legend
 # plt.legend()
-    
+
 # # Save the plot as an image in the list
 # plt.savefig('plot_1800.png')
 
@@ -376,7 +393,7 @@ if False:
 #                 output_image.save(original_rt_path)
 #             elif i == 2:
 #                 output_image.save(recon_rt_path)
-#             elif i == 3:  
+#             elif i == 3:
 #                 output_image.save(mt_card_path)
 #             elif i == 4:
 #                 output_image.save(mt_card_wavelet_path)
@@ -384,7 +401,7 @@ if False:
 #                 output_image.save(gen_card_path)
 #     except EOFError:
 #         pass
-    
+
 # for i in range(6,9):
 #     rows = []
 #     try:
@@ -404,7 +421,7 @@ if False:
 #             output_image = Image.fromarray(output_image_array)
 #             if i == 6:
 #                 output_image.save(mt_resp_path)
-#             elif i == 7:  
+#             elif i == 7:
 #                 output_image.save(mt_resp_wavelet_path)
 #             elif i == 8:
 #                 output_image.save(gen_resp_path)
@@ -430,16 +447,9 @@ if False:
 #             output_image = Image.fromarray(output_image_array)
 #             if i == 9:
 #                 output_image.save(mt_recovery_path)
-#             elif i == 10:  
+#             elif i == 10:
 #                 output_image.save(mt_recovery_wavelet_path)
 #             elif i == 11:
 #                 output_image.save(gen_recovery_path)
 #     except EOFError:
 #         pass
-
-
-
-
-
-
-
