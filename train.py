@@ -373,6 +373,7 @@ for file_name in os.listdir(data_folder):
 
         for lr_value in lr_grid:
             optimizer = optim.Adam(model.parameters(), lr=lr_value)
+            #best lr = 0.0001 1e-4
             
             max_epochs = 10000
             epoch_plot_step = 10
