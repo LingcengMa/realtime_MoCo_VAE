@@ -45,7 +45,7 @@ if "flipAngle" in mat_data:
     IFdualFA = True
 else:
     flipAngles = np.zeros_like(thetas)
-
+    
 ### fixing wallclock ###
 wallClock = (wallClock - 1) % 5 + 1
 
@@ -67,12 +67,12 @@ theta0 = torch.zeros_like(thetas_mu).to(torch.float32)
 t1t2_normalized = torch.cat([Segidx_mu, wallClock_mu], dim=1).to(torch.float32)
 t1t2theta = torch.cat([Segidx_mu, wallClock_mu, thetas_mu], dim=1).to(torch.float32)
 t1t2theta0 = torch.cat([Segidx_mu, wallClock_mu, theta0], dim=1).to(torch.float32)
-t1t2fatheta = torch.cat([Segidx_mu, wallClock_mu, flipAngles_mu, thetas_mu], dim=1).to(
-    torch.float32
-)
-t1t2fatheta0 = torch.cat([Segidx_mu, wallClock_mu, flipAngles_mu, theta0], dim=1).to(
-    torch.float32
-)
+t1t2fatheta = torch.cat(
+    [Segidx_mu, wallClock_mu, flipAngles_mu, thetas_mu], dim=1
+).to(torch.float32)
+t1t2fatheta0 = torch.cat(
+    [Segidx_mu, wallClock_mu, flipAngles_mu, theta0], dim=1
+).to(torch.float32)
 
 Phi_rt_init = Phi_rt_init / Phi_rt_init[:, 0].std()  # Normalize whole
 # Phi_rt_init = (Phi_rt_init - Phi_rt_init.mean(axis=1, keepdims=True)) / Phi_rt_init.std(axis=1, keepdims=True) #Normalize each feature
@@ -84,11 +84,7 @@ Phi_rt_init = torch.from_numpy(Phi_rt_init_con).float().to(device)
 
 feature_size = Phi_rt_init.size()[1]
 model = CVAE_BP_HT(feature_size, latent_dims=2, class_size=4).to(device)
-model.load_state_dict(
-    torch.load(
-        "/home/xfang/projects/CVAE_SMS/SMS_models_kld/model_ExtractToPython_0618_2_run1.pth"
-    )
-)
+model.load_state_dict(torch.load('/home/xfang/projects/CVAE_SMS/SMS_models_kld/model_ExtractToPython_0618_2_run1.pth'))
 
 recon_output_ec, latent_space_mu, latent_space_logvar = model(Phi_rt_init, t1t2fatheta)
 recon_output_ec = model.decode(latent_space_mu, t1t2fatheta).to("cpu").detach().numpy()
@@ -110,32 +106,24 @@ resp0 = (bin_range[0] + bin_range[1]) / 2
 cardiac1 = latent_space_mu[:, 1]
 cardiac2 = latent_space_mu[:, 2]
 
-
 def average_cycle(cardiac1, cardiac2):
     card_amplitude = np.sqrt(cardiac1**2 + cardiac2**2)
     card_phase = np.arctan2(cardiac2, cardiac1)
-    left_phase = card_phase - 2 * np.pi
-    right_phase = card_phase + 2 * np.pi
+    left_phase = card_phase - 2*np.pi
+    right_phase = card_phase + 2*np.pi
     padded_amplitude = np.concatenate((card_amplitude, card_amplitude, card_amplitude))
     padded_phase = np.concatenate((left_phase, card_phase, right_phase))
     lowess = sm.nonparametric.lowess
-    smoothed_cardiac = lowess(padded_amplitude, padded_phase, frac=0.1)
-    smoothed_phase = smoothed_cardiac[
-        cardiac1.shape[0] : (2 * cardiac1.shape[0] - 1), 0
-    ]
-    smoothed_amplitude = smoothed_cardiac[
-        cardiac1.shape[0] : (2 * cardiac1.shape[0] - 1), 1
-    ]
+    smoothed_cardiac = lowess(padded_amplitude, padded_phase, frac=0.3)
+    smoothed_phase = smoothed_cardiac[cardiac1.shape[0]:(2*cardiac1.shape[0]-1), 0]
+    smoothed_amplitude = smoothed_cardiac[cardiac1.shape[0]:(2*cardiac1.shape[0]-1), 1]
     min_index = np.argmin(smoothed_amplitude)  # Index of min amplitude
     min_phase = smoothed_phase[min_index]  # Corresponding phase
     phase0 = min_phase
     unique_phase, unique_indices = np.unique(smoothed_phase, return_index=True)
     unique_amplitude = smoothed_amplitude[unique_indices]  # Keep only unique amplitude
-    amplitude_function = interp1d(
-        unique_phase, unique_amplitude, kind="cubic", fill_value="extrapolate"
-    )
+    amplitude_function = interp1d(unique_phase, unique_amplitude, kind="cubic", fill_value="extrapolate")
     return phase0, amplitude_function
-
 
 phase0, amplitude_function = average_cycle(cardiac1, cardiac2)
 
@@ -145,45 +133,31 @@ contrast_num = 3600
 module_num = 10
 contrast_sub = contrast_num // module_num
 conditional_input = 4
-Segidx_excerpt = Segidx_mu[: contrast_num // module_num, :].to("cpu").detach().numpy()
-axis = np.linspace(
-    1, contrast_num / module_num, contrast_num // module_num, endpoint=False
-)
-axis_interp = np.linspace(
-    1, contrast_num / module_num, 2 * contrast_num // module_num, endpoint=False
-)
-f = interp1d(axis, Segidx_excerpt, axis=0, kind="linear", fill_value="extrapolate")
+Segidx_excerpt = Segidx_mu[:contrast_num//module_num,:].to("cpu").detach().numpy()
+axis = np.linspace(1, contrast_num/module_num, contrast_num//module_num, endpoint=False)
+axis_interp = np.linspace(1, contrast_num/module_num, 2*contrast_num//module_num, endpoint=False) 
+f = interp1d(axis, Segidx_excerpt, axis=0, kind='linear', fill_value='extrapolate')
 Segidx_interp_np = f(axis_interp)
-Segidx_interp = (
-    torch.tensor(Segidx_interp_np, dtype=torch.float32).repeat(10, 1).to(device)
-)
-conditional_3 = t1t2fatheta0[:contrast_num, 1:4].unsqueeze(0).permute(0, 2, 1)
-conditional_3_interp = F.interpolate(
-    conditional_3, size=2 * contrast_num, mode="linear", align_corners=True
-)
+Segidx_interp = torch.tensor(Segidx_interp_np, dtype=torch.float32).repeat(10,1).to(device)
+conditional_3 = t1t2fatheta0[:contrast_num,1:4].unsqueeze(0).permute(0, 2, 1)
+conditional_3_interp = F.interpolate(conditional_3, size=2*contrast_num, mode='linear', align_corners=True)
 conditional_3_interp = conditional_3_interp.permute(0, 2, 1).squeeze(0)
 conditional_interp = torch.cat((Segidx_interp, conditional_3_interp), dim=1)
 
-latent_space_mu_fitting = torch.ones(contrast_num * 2 * cbins * rbins, 3).to(device)
+latent_space_mu_fitting = torch.ones(contrast_num*2*cbins*rbins, 3).to(device)
 resp_bins = torch.linspace(resp_min, resp_max, rbins)
-latent_space_mu_fitting[:, 0] = resp_bins.repeat_interleave(contrast_num * 2 * cbins)
-card_phase_values = torch.linspace(phase0, phase0 + 2 * np.pi, cbins)
+latent_space_mu_fitting[:,0] = resp_bins.repeat_interleave(contrast_num*2*cbins)
+card_phase_values = torch.linspace(phase0, phase0+2*np.pi, cbins)
 card_phase_values = (card_phase_values + np.pi) % (2 * np.pi) - np.pi
-card_phase_bins = card_phase_values.repeat_interleave(contrast_num * 2).repeat(rbins)
+card_phase_bins = card_phase_values.repeat_interleave(contrast_num*2).repeat(rbins)
 card_amplitude_bins = amplitude_function(card_phase_bins)
-latent_space_mu_fitting[:, 1] = torch.from_numpy(card_amplitude_bins) * torch.cos(
-    card_phase_bins
-)
-latent_space_mu_fitting[:, 2] = torch.from_numpy(card_amplitude_bins) * torch.sin(
-    card_phase_bins
-)
-condition_fitting = conditional_interp.repeat(cbins * rbins, 1).to(device)
-phi4fitting = (
-    model.decode(latent_space_mu_fitting, condition_fitting).to("cpu").detach().numpy()
-)
+latent_space_mu_fitting[:,1] = torch.from_numpy(card_amplitude_bins) * torch.cos(card_phase_bins)
+latent_space_mu_fitting[:,2] = torch.from_numpy(card_amplitude_bins) * torch.sin(card_phase_bins)
+condition_fitting = conditional_interp.repeat(cbins*rbins,1).to(device)
+phi4fitting = model.decode(latent_space_mu_fitting,condition_fitting).to("cpu").detach().numpy()
 
 savemat(
-    "/home/xfang/Data/Multitasking_SMS/Human_SMS_20210618_2/2D_SMS_DATA/lowesssmall_python_0618_2_run1.mat",
+    "/home/xfang/Data/Multitasking_SMS/Human_SMS_20210618_2/2D_SMS_DATA/python_0618_2_run1.mat",
     {
         "realtime": recon_output,
         "phi4fitting": phi4fitting,
@@ -191,3 +165,4 @@ savemat(
         "endofdiastole": phase0,
     },
 )
+
