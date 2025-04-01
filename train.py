@@ -12,29 +12,23 @@ import torch.optim as optim
 import mat73
 from pathlib import Path
 from tqdm import tqdm
-from network import VAE, CVAE, CVAE_BP, CVAE_BP_HT, DAE
+from network import CVAE_BP_HT
 from torchvision import datasets
-
-# from Vae1 import vae_test2, vae_test1, vae_test3, vae_test4, vae_test5, vae_test6, vae_test8
-# from models import VariationalAutoencoder_hc, VariationalAutoencoder_hc_m, VariationalAutoencoder_linear4, VariationalAutoencoder_nonlinear4
 import numpy as np
 import scipy
 import matplotlib.pyplot as plt
 
 plt.rcParams["figure.dpi"] = 200
-from sklearn.feature_selection import mutual_info_regression
-
 torch.autograd.set_detect_anomaly(True)
+
 # Configuration
-# device = 'cpu'
 device = "cuda" if torch.cuda.is_available() else "cpu"
-# MI = MutualInformation(num_bins=256, sigma=0.4, normalize=True).to(device)
 
 # data_init
-
 path = os.path.dirname(os.path.realpath(__file__))
 
 
+# functions
 def loss_function_BP(recon_x, x, mu, mu_filtered, logvar):
     BCE = F.mse_loss(recon_x, x)
     KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
@@ -51,9 +45,7 @@ def loss_function(recon_x, x, mu, logvar):
 def loss_function_KLD(recon_x, x, mu, logvar, kld_index):
     BCE = F.mse_loss(recon_x, x)
     KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-    return (
-        BCE + kld_index * KLD
-    )  
+    return BCE + kld_index * KLD
 
 
 def low_pass_filter(x, upper_limit):
@@ -87,15 +79,11 @@ def reset_weights(m):
         # torch.nn.init.kaiming_uniform_(m.weight,0,"fan_in","leaky_relu")
         if m.bias is not None:
             m.bias.data.fill_(0.01)
-            
 
-### training ###
+
+### training functions ###
 def train_model(
-    model, optimizer, 
-    max_epochs, 
-    epoch_plot_step, 
-    Phi_rt_init, 
-    conditional_input
+    model, optimizer, max_epochs, epoch_plot_step, Phi_rt_init, conditional_input
 ):
     losses = []
     NRMSE = []
@@ -115,12 +103,11 @@ def train_model(
             mse = ((recon_x - Phi_rt_init) ** 2).sum()
             nrmse_ = torch.sqrt(mse / total)
             NRMSE.append(nrmse_.detach().cpu().numpy())
-            pbar.set_description(
-                f"train_loss: {train_loss:.3e}, NRMSE: {nrmse_:.4f}"
-            )
+            pbar.set_description(f"train_loss: {train_loss:.3e}, NRMSE: {nrmse_:.4f}")
             pbar.update(epoch_plot_step)
     pbar.close()
     return losses, NRMSE
+
 
 ### evaluation mode ###
 def train_model_kld(
@@ -151,12 +138,70 @@ def train_model_kld(
             mse = ((recon_x - Phi_rt_init) ** 2).sum()
             nrmse_ = torch.sqrt(mse / total)
             NRMSE.append(nrmse_.detach().cpu().numpy())
-            pbar.set_description(
-                f"train_loss: {train_loss:.3e}, NRMSE: {nrmse_:.4f}"
-            )
+            pbar.set_description(f"train_loss: {train_loss:.3e}, NRMSE: {nrmse_:.4f}")
             pbar.update(epoch_plot_step)
     pbar.close()
     return losses, NRMSE
+
+
+def plot_latent_space(model, data, conditional, epoch):
+    model.eval()
+    with torch.no_grad():
+        _, z, _ = model(data, conditional)
+
+    z = z.to("cpu").detach().numpy()
+
+    fig, axs = plt.subplots(1, 3, figsize=(30, 10))
+    axs = axs.flatten()  # Flatten the 2x2 array of axes for easy indexing
+    for i in range(3):
+        axs[i].plot(z[:4000, i], label=f"Latent vector {i+1}")
+        axs[i].legend(loc="upper right")
+    plt.tight_layout()
+    plt.title(f"Latent Space at Epoch {epoch}")
+    fig.savefig(
+        os.path.join(plot_folder, f"{file_name}_latent_vector at Epoch {epoch}.png")
+    )
+
+
+def train_long(
+    model,
+    optimizer,
+    max_epochs,
+    checkpoint,
+    epoch_plot_step,
+    Phi_rt_init,
+    conditional_input,
+):
+    losses = []
+    NRMSE = []
+    total = (Phi_rt_init**2).sum()
+    pbar = tqdm(total=max_epochs, desc="Initializing")
+    for epoch in range(max_epochs):
+        model.train()
+        recon_x, mu, logvar = model(Phi_rt_init, conditional_input)
+        optimizer.zero_grad()
+        loss = loss_function(recon_x, Phi_rt_init, mu, logvar)
+        loss.backward()
+        optimizer.step()
+        if (epoch % epoch_plot_step) == (epoch_plot_step - 1):
+            train_loss = loss.detach().cpu().numpy() / Phi_rt_init.shape[0]
+            losses.append(train_loss)
+            mu, logvar = model.encode(Phi_rt_init, conditional_input)
+            recon_x = model.decode(mu, conditional_input)  # NO REPARAMETERIZATION
+            mse = ((recon_x - Phi_rt_init) ** 2).sum()
+            nrmse_ = torch.sqrt(mse / total)
+            NRMSE.append(nrmse_.detach().cpu().numpy())
+            pbar.set_description(f"train_loss: {train_loss:.3e}, NRMSE: {nrmse_:.4f}")
+            pbar.update(epoch_plot_step)
+        if (epoch % checkpoint) == 0:
+            torch.save(
+                model.state_dict(),
+                os.path.join(model_folder, f"model_{file_name}_epoch_{epoch}.pth"),
+            )
+            plot_latent_space(model, Phi_rt_init, conditional_input, epoch)
+    pbar.close()
+    return losses, NRMSE
+
 
 def evaluate_model(model, Phi_rt_init_val, conditional_input):
     model.eval()
@@ -171,6 +216,15 @@ def evaluate_model(model, Phi_rt_init_val, conditional_input):
         mse = ((recon_output - Phi_rt_init_val) ** 2).sum()
         nrmse = torch.sqrt(mse / total)
     return nrmse
+
+
+class DecoderWrapper(nn.Module):
+    def __init__(self, model):
+        super().__init__()
+        self.model = model
+
+    def forward(self, z, c):
+        return self.model.decode(z, c)  # Call the decode method
 
 
 # if False: #to improve: do this with a flag
@@ -248,13 +302,30 @@ if False:
         [Segidx_mu, wallClock_mu, flipAngles_mu, theta0], dim=1
     ).to(torch.float32)
 
-kld_grid = [1e30, 1e-24, 1e-21, 1e-18, 1e-15, 1e-12, 1e-9, 1e-6, 1e-3, 1, 1e3, 1e6, 1e9, 1e12]
+# KLD indices to test
+kld_indices = [
+    1e-30,
+    1e-27,
+    1e-24,
+    1e-21,
+    1e-18,
+    1e-15,
+    1e-12,
+    1e-9,
+    1e-6,
+    1e-3,
+    1,
+    1e3,
+    1e6,
+    1e9,
+    1e12,
+]
 lr_grid = [1e-2, 1e-4, 1e-6, 1e-8, 1e-10]
 
-data_folder = "./qual_data"
-plot_folder = "./qual_test"
-model_folder = "./qual_test"
-assets_folder = "./qual_test"
+data_folder = "./sms_data_test"
+plot_folder = "./latent_plots"
+model_folder = "./SMS_models"
+assets_folder = "./SMS_assest"
 # model_folder = './cine_models'
 # assets_folder = './assets'
 
@@ -281,13 +352,12 @@ for file_name in os.listdir(data_folder):
     Segidx = mat_data["Segidx"].reshape(-1, 1)
     wallClock = mat_data["wallClock"].reshape(-1, 1)
     thetas = mat_data["thetas"].reshape(-1, 1)
-    
+
     if "flipAngle" in mat_data:
         flipAngles = mat_data["flipAngle"].reshape(-1, 1)
         IFdualFA = True
     else:
         flipAngles = np.zeros_like(thetas)
-        
 
     ### fixing wallclock ###
     wallClock = (wallClock - 1) % 5 + 1
@@ -325,33 +395,76 @@ for file_name in os.listdir(data_folder):
     Phi_rt_init_con = np.concatenate((Phi_rt_init_real, Phi_rt_init_imag))
     Phi_rt_init_con = Phi_rt_init_con.transpose()
     Phi_rt_init = torch.from_numpy(Phi_rt_init_con).float().to(device)
-    
-    if False:
+
+    if True:
         #### training ####
         feature_size = Phi_rt_init.size()[1]
         model = CVAE_BP_HT(feature_size, latent_dims=2, class_size=4).to(device)
         model.apply(reset_weights)
 
-        optimizer = optim.Adam(model.parameters(), lr=1e-2)
-        max_epochs = 2000
+        optimizer = optim.Adam(model.parameters(), lr=1e-4)
+        max_epochs = 60000
         epoch_plot_step = 10
-        
+        checkpoint = 10000
+
         print(f"Training on Data File: {file_name}")
         losses, NRMSE = train_model(
-                model,
-                optimizer,
-                max_epochs,
-                epoch_plot_step,
-                Phi_rt_init,
-                t1t2fatheta
-            )
-            # Save the model after training on the current dataset
+            model, optimizer, max_epochs, epoch_plot_step, Phi_rt_init, t1t2fatheta
+        )
+        # Save the model after training on the current dataset
         torch.save(
             model.state_dict(),
             os.path.join(model_folder, f"model_{file_name}.pth"),
-            )
-        print(f"Model saved as model_{file_name}.pth") 
-        
+        )
+        print(f"Model saved as model_{file_name}.pth")
+        # losses, NRMSE = train_long(model, optimizer, max_epochs, checkpoint, epoch_plot_step, Phi_rt_init, t1t2fatheta)
+        # model = torch.load('SMS_models/model_ExtractToPython_0601_run1.pt')
+        # example_c = torch.randn(1, 4).to(device)
+        # example_z= torch.randn(1, 3).to(device)
+        # Decoder = DecoderWrapper(model).to(device)
+
+        # torch.onnx.export(
+        #     Decoder,
+        #     (example_z, example_c),
+        #     '/home/xfang/Data/Multitasking_SMS/Human_SMS_20210601/2D_SMS_DATA/cvae_decoder.onnx',
+        #     input_names=['latent_input', 'conditional_input'],
+        #     output_names=['output'],
+        #     dynamic_axes={
+        #         'latent_input': {0: 'batch_size'},
+        #         'conditional_input': {0: 'batch_size'},
+        #         'output': {0: 'batch_size'}
+        #     }
+        # )
+
+        # traced_model = torch.jit.trace_module(model.decode, (example_z, example_conditions))
+        # torch.jit.save(traced_model, os.path.join(model_folder, f"traced_decoder_{file_name}.pt"),)
+        # model.eval()
+
+        with torch.no_grad():
+            mu, logvar = model.encode(
+                Phi_rt_init, t1t2fatheta
+            )  # Get latent space representations
+        # torch.save(mu, f"{file_name}_latent_vectors.pt")
+
+        # mu = mu.to('cpu').detach().numpy()
+        # scipy.io.savemat(f"/home/xfang/Data/Multitasking_SMS/Human_SMS_20210601/2D_SMS_DATA/{file_name}_latent_vectors.mat", {"latent": mu})
+
+        # output = Decoder(mu, t1t2fatheta0).detach().cpu().numpy()
+        # recon_output = model.decode(mu, t1t2fatheta0).detach().cpu().numpy()
+
+        # fig2, axs2 = plt.subplots(2, 4, figsize=(20, 20))
+        # axs2 = axs2.flatten()  # Flatten the 2x2 array of axes for easy indexing
+        # for i in range(4):
+        #     axs2[i].plot(recon_output[:3600, i], label = f'Phi_rt_init Col {i+1}')
+        #     axs2[i].plot(output[:3600, i], label = f'Recon_output w/eddy current Col {i+1}')
+        #     axs2[i].legend(loc="upper right")
+        # for i in range(4):
+        #     axs2[i+4].plot(recon_output[:3600, i], label=f'Phi_rt_init Col {i+1}')
+        #     axs2[i+4].plot(output[:3600, i], label=f'Recon_output Col {i+1}')
+        #     axs2[i+4].legend(loc="upper right")
+        # plt.tight_layout()
+        # fig2.savefig('testtest.png')
+
     else:
         #### training and validation ###
         total_size = Phi_rt_init.size(0)
@@ -361,125 +474,194 @@ for file_name in os.listdir(data_folder):
         phi_train = Phi_rt_init[:train_size]  # First 80%
         phi_val = Phi_rt_init[train_size:]  # Last 20%
 
-        conditional_train = t1t2theta[:train_size]
-        conditional_val = t1t2theta[train_size:]
-        
+        conditional_train = t1t2fatheta[:train_size]
+        conditional_val = t1t2fatheta[train_size:]
+
         # conditional_train = t1t2fatheta[:train_size]
         # conditional_val = t1t2fatheta[train_size:]
 
         feature_size = Phi_rt_init.size()[1]
-        model = CVAE_BP_HT(feature_size, latent_dims=2, class_size=3).to(device)
+        model = CVAE_BP_HT(feature_size, latent_dims=2, class_size=4).to(device)
         model.apply(reset_weights)
 
-        for lr_value in lr_grid:
-            optimizer = optim.Adam(model.parameters(), lr=lr_value)
-            #best lr = 0.0001 1e-4
-            
-            max_epochs = 10000
-            epoch_plot_step = 10
-            best_nrmse = 0
-        
-            for kld_index in kld_grid:
-                model.apply(reset_weights)
-                print(f"Training on Data File: {file_name} with KLD Index: {kld_index} and LR: {lr_value}")
-                losses, NRMSE = train_model_kld(
-                    model,
-                    optimizer,
-                    max_epochs,
-                    epoch_plot_step,
-                    phi_train,
-                    conditional_train,
-                    kld_index,
-                )
-                # Save the model after training on the current dataset
-                torch.save(
-                    model.state_dict(),
-                    os.path.join(model_folder, f"model_{file_name}_kld_{kld_index}.pth"),
-                )
-                print(f"Model saved as model_{file_name}_kld_{kld_index}.pth")
-                val_nrmse = evaluate_model(model, phi_val, conditional_val)
-                print(f"Validation Accuracy: {val_nrmse}")
+        # for lr_value in lr_grid:
+        optimizer = optim.Adam(model.parameters(), lr=0.0001)
+        # best lr = 0.0001 1e-4
+
+        max_epochs = 40000
+        epoch_plot_step = 10
+        best_nrmse = 1
+        train_nrmse_list = []
+        val_nrmse_list = []
+
+        for kld_index in kld_indices:
+            model.apply(reset_weights)
+            print(f"Training on Data File: {file_name} with KLD Index: {kld_index}")
+            losses, train_nrmse = train_model_kld(
+                model,
+                optimizer,
+                max_epochs,
+                epoch_plot_step,
+                phi_train,
+                conditional_train,
+                kld_index,
+            )
+            # Save the model after training on the current dataset
+            torch.save(
+                model.state_dict(),
+                os.path.join(model_folder, f"model_{file_name}_kld_{kld_index}.pth"),
+            )
+
+            recon_output_ec, latent_space_mu, latent_space_logvar = model(
+                Phi_rt_init, t1t2fatheta
+            )
+            recon_output_ec = (
+                recon_output_ec.to("cpu").detach().numpy()
+            )  # w/ eddy current
+            recon_output = model.decode(
+                latent_space_mu, t1t2fatheta0
+            )  # NO REPARAMETERIZATION
+            recon_output = recon_output.to("cpu").detach().numpy()
+            latent_space_mu = latent_space_mu.to("cpu").detach().numpy()
+
+            print(f"Model saved as model_{file_name}_kld_{kld_index}.pth")
+            val_nrmse = evaluate_model(model, phi_val, conditional_val)
+            train_nrmse_list.append(train_nrmse)
+            val_nrmse_list.append(val_nrmse)
+
+            fig, axs = plt.subplots(1, 3, figsize=(30, 10))
+            # fig3, axs3 = plt.subplots(3, 1, figsize=(10, 10))
+            axs = axs.flatten()  # Flatten the 2x2 array of axes for easy indexing
+            for i in range(3):
+                axs[i].plot(latent_space_mu[:3600, i], label=f"Latent vector {i+1}")
+                axs[i].legend(loc="upper right")
+            # axs[3].plot(Segidx[:3600], label='Segidx')
+            # axs[3].legend(loc="upper right")
+            # axs[4].plot(wallClock[:3600], label='T2prep index')
+            # axs[4].legend(loc="upper right")
+            # axs[5].plot(flipAngles[:3600], label='Flip Angles')
+            # axs[5].legend(loc="upper right")
+            # plot title
+            plt.suptitle(f"KLD Index: {kld_index}")
+            plt.tight_layout()
+            fig.savefig(
+                os.path.join(plot_folder, f"{file_name}_{kld_index}_latent.png")
+            )
+
+            print(f"Validation Accuracy: {val_nrmse}")
             if val_nrmse < best_nrmse:
                 best_nrmse = val_nrmse
                 best_kld_index = kld_index
-                best_lr = lr_value
+                # best_lr = lr_value
                 best_model = model
-        print(f"Best Model: {file_name} with KLD Index: {best_kld_index} and LR: {best_lr}")
+
+        # save train_nrmse_list and val_nrmse_list
+        torch.save(
+            train_nrmse_list,
+            os.path.join(model_folder, f"train_nrmse_list_{file_name}.pth"),
+        )
+        torch.save(
+            val_nrmse_list,
+            os.path.join(model_folder, f"val_nrmse_list_{file_name}.pth"),
+        )
+        # Plot the NRMSE for different KLD indices
+
+        plt.figure(figsize=(8, 5))
+        plt.plot(
+            kld_indices,
+            train_nrmse_list.to("cpu").detach().numpy(),
+            marker="o",
+            label="Training NRMSE",
+        )
+        plt.plot(
+            kld_indices,
+            val_nrmse_list.to("cpu").detach().numpy(),
+            marker="o",
+            label="Validation NRMSE",
+        )
+        plt.xlabel("KLD Index")
+        plt.ylabel("NRMSE")
+        plt.title("NRMSE vs KLD Index")
+        plt.legend()
+        plt.grid(True)
+        plt.show()
+        plt.savefig(os.path.join(plot_folder, f"{file_name}_kld_nrmse.png"))
+        # print(f"Best Model: {file_name} with KLD Index: {best_kld_index} ")
 
     ##### LOSS GRAPHS #####
-    fig1, axs1 = plt.subplots(2, 1, figsize=(10, 10))  # 2 rows, 1 column, optional figure size
-    # First subplot for Training Loss
-    axs1[0].plot((np.arange(len(losses)) +1) * epoch_plot_step, losses, label='Training Loss')
-    axs1[0].set_xlabel('Epochs')
-    axs1[0].set_ylabel('Loss')
-    axs1[0].set_title('Training Loss Curve')
-    axs1[0].legend()
-    # Second subplot for NRMSE
-    axs1[1].plot((np.arange(len(NRMSE)) + 1) * epoch_plot_step, NRMSE, label='NRMSE')
-    axs1[1].set_xlabel('Epochs')
-    axs1[1].set_ylabel('NRMSE')
-    axs1[1].set_title('NRMSE Curve')
-    axs1[1].legend()
-    plt.tight_layout()
-    fig1.savefig(os.path.join(plot_folder, f'{file_name}_lossgraph_train.png'))
+    # fig1, axs1 = plt.subplots(2, 1, figsize=(10, 10))  # 2 rows, 1 column, optional figure size
+    # # First subplot for Training Loss
+    # axs1[0].plot((np.arange(len(losses)) +1) * epoch_plot_step, losses, label='Training Loss')
+    # axs1[0].set_xlabel('Epochs')
+    # axs1[0].set_ylabel('Loss')
+    # axs1[0].set_title('Training Loss Curve')
+    # axs1[0].legend()
+    # # Second subplot for NRMSE
+    # axs1[1].plot((np.arange(len(train_nrmse)) + 1) * epoch_plot_step, train_nrmse, label='NRMSE')
+    # axs1[1].set_xlabel('Epochs')
+    # axs1[1].set_ylabel('NRMSE')
+    # axs1[1].set_title('NRMSE Curve')
+    # axs1[1].legend()
+    # plt.tight_layout()
+    # fig1.savefig(os.path.join(plot_folder, f'{file_name}_lossgraph.png'))
 
     ####DEBUGGING PLOTS########
-    recon_output_ec, latent_space_mu, latent_space_logvar = model(Phi_rt_init, t1t2fatheta)
-    recon_output_ec = recon_output_ec.to('cpu').detach().numpy() # w/ eddy current
-    recon_output = model.decode(latent_space_mu, t1t2fatheta0) #NO REPARAMETERIZATION
-    recon_output = recon_output.to('cpu').detach().numpy()
-    latent_space_mu = latent_space_mu.to('cpu').detach().numpy()
-    np.save(os.path.join(assets_folder, f'{file_name}_latent_space.npy'), latent_space_mu)
-    np.save(os.path.join(assets_folder, f'{file_name}_recon_output.npy'), recon_output)
-    np.save(os.path.join(assets_folder, f'{file_name}_recon_output_ec.npy'), recon_output_ec)
+    # recon_output_ec, latent_space_mu, latent_space_logvar = model(Phi_rt_init, t1t2fatheta)
+    # recon_output_ec = recon_output_ec.to('cpu').detach().numpy() # w/ eddy current
+    # recon_output = model.decode(latent_space_mu, t1t2fatheta0) #NO REPARAMETERIZATION
+    # recon_output = recon_output.to('cpu').detach().numpy()
+    # latent_space_mu = latent_space_mu.to('cpu').detach().numpy()
+    # np.save(os.path.join(assets_folder, f'{file_name}_latent_space.npy'), latent_space_mu)
+    # np.save(os.path.join(assets_folder, f'{file_name}_recon_output.npy'), recon_output)
+    # np.save(os.path.join(assets_folder, f'{file_name}_recon_output_ec.npy'), recon_output_ec)
 
     # output plots
-    fig2, axs2 = plt.subplots(2, 4, figsize=(20, 20))
-    axs2 = axs2.flatten()  # Flatten the 2x2 array of axes for easy indexing
-    for i in range(4):
-        axs2[i].plot(Phi_rt_init[:3600, i].cpu(), label = f'Phi_rt_init Col {i+1}')
-        axs2[i].plot(recon_output_ec[:3600, i], label = f'Recon_output w/eddy current Col {i+1}')
-        axs2[i].legend(loc="upper right")
-    for i in range(4):
-        axs2[i+4].plot(Phi_rt_init[:3600, i].cpu(), label=f'Phi_rt_init Col {i+1}')
-        axs2[i+4].plot(recon_output[:3600, i], label=f'Recon_output Col {i+1}')
-        axs2[i+4].legend(loc="upper right")
-    plt.tight_layout()
-    fig2.savefig(os.path.join(plot_folder, f'{file_name}_recon_output_train.png'))
-   
+    # fig2, axs2 = plt.subplots(2, 4, figsize=(20, 20))
+    # axs2 = axs2.flatten()  # Flatten the 2x2 array of axes for easy indexing
+    # for i in range(4):
+    #     axs2[i].plot(Phi_rt_init[:3600, i].cpu(), label = f'Phi_rt_init Col {i+1}')
+    #     axs2[i].plot(recon_output_ec[:3600, i], label = f'Recon_output w/eddy current Col {i+1}')
+    #     axs2[i].legend(loc="upper right")
+    # for i in range(4):
+    #     axs2[i+4].plot(Phi_rt_init[:3600, i].cpu(), label=f'Phi_rt_init Col {i+1}')
+    #     axs2[i+4].plot(recon_output[:3600, i], label=f'Recon_output Col {i+1}')
+    #     axs2[i+4].legend(loc="upper right")
+    # plt.tight_layout()
+    # fig2.savefig(os.path.join(plot_folder, f'{file_name}_recon_output.png'))
+
     # latent vectors
-    fig3, axs3 = plt.subplots(2, 3, figsize=(10, 10))
-    # fig3, axs3 = plt.subplots(3, 1, figsize=(10, 10))
-    axs3 = axs3.flatten()  # Flatten the 2x2 array of axes for easy indexing
-    for i in range(3):
-        axs3[i].plot(latent_space_mu[:3600, i], label=f'Latent vector {i+1}')
-        axs3[i].legend(loc="upper right")
-    axs3[3].plot(Segidx[:3600], label='Segidx')
-    axs3[3].legend(loc="upper right")
-    axs3[4].plot(wallClock[:3600], label='T2prep index')
-    axs3[4].legend(loc="upper right")
-    axs3[5].plot(flipAngles[:3600], label='Flip Angles')
-    axs3[5].legend(loc="upper right")
-    plt.tight_layout()
-    fig3.savefig(os.path.join(plot_folder, f'{file_name}_latent_vector_train.png'))
-    
-    #fft of latent vectors
-    fig4, axs4 = plt.subplots(3, 1, figsize=(10, 10))
-    u2_fft = np.fft.fft(latent_space_mu[:,1])
-    u2_freq = np.fft.fftfreq(len(latent_space_mu[:,1]), d=0.0534)
-    u3_fft = np.fft.fft(latent_space_mu[:,2])
-    u3_freq = np.fft.fftfreq(len(latent_space_mu[:,2]), d=0.0534)
-    Phi_rt_init = Phi_rt_init.to('cpu').detach().numpy()
-    col8_fft = np.fft.fft(Phi_rt_init[:,7])
-    col8_freq = np.fft.fftfreq(len(Phi_rt_init[:,7]), d=0.0534)
-    axs4[0].plot(u2_freq, np.abs(u2_fft), label='fft of cardiac 1')
-    axs4[0].legend(loc="upper right")
-    axs4[1].plot(u3_freq, np.abs(u3_fft), label='fft of cardiac 2')
-    axs4[1].legend(loc="upper right")
-    axs4[2].plot(col8_freq, np.abs(col8_fft), label='fft of Phi_rt_init Col 8')
-    axs4[2].legend(loc="upper right")
-    plt.tight_layout()
-    fig4.savefig(os.path.join(plot_folder, f'{file_name}_fft_latent_vector_train.png'))
+    # fig3, axs3 = plt.subplots(1, 3, figsize=(30, 10))
+    # # fig3, axs3 = plt.subplots(3, 1, figsize=(10, 10))
+    # axs3 = axs3.flatten()  # Flatten the 2x2 array of axes for easy indexing
+    # for i in range(3):
+    #     axs3[i].plot(latent_space_mu[:4000, i], label=f'Latent vector {i+1}')
+    #     axs3[i].legend(loc="upper right")
+    # # axs3[3].plot(Segidx[:3600], label='Segidx')
+    # # axs3[3].legend(loc="upper right")
+    # # axs3[4].plot(wallClock[:3600], label='T2prep index')
+    # # axs3[4].legend(loc="upper right")
+    # # axs3[5].plot(flipAngles[:3600], label='Flip Angles')
+    # # axs3[5].legend(loc="upper right")
+    # plt.tight_layout()
+    # fig3.savefig(os.path.join(plot_folder, f'{file_name}_latent_vector.png'))
+
+    # fft of latent vectors
+    # fig4, axs4 = plt.subplots(3, 1, figsize=(10, 10))
+    # u2_fft = np.fft.fft(latent_space_mu[:,1])
+    # u2_freq = np.fft.fftfreq(len(latent_space_mu[:,1]), d=0.0534)
+    # u3_fft = np.fft.fft(latent_space_mu[:,2])
+    # u3_freq = np.fft.fftfreq(len(latent_space_mu[:,2]), d=0.0534)
+    # Phi_rt_init = Phi_rt_init.to('cpu').detach().numpy()
+    # col8_fft = np.fft.fft(Phi_rt_init[:,7])
+    # col8_freq = np.fft.fftfreq(len(Phi_rt_init[:,7]), d=0.0534)
+    # axs4[0].plot(u2_freq, np.abs(u2_fft), label='fft of cardiac 1')
+    # axs4[0].legend(loc="upper right")
+    # axs4[1].plot(u3_freq, np.abs(u3_fft), label='fft of cardiac 2')
+    # axs4[1].legend(loc="upper right")
+    # axs4[2].plot(col8_freq, np.abs(col8_fft), label='fft of Phi_rt_init Col 8')
+    # axs4[2].legend(loc="upper right")
+    # plt.tight_layout()
+    # fig4.savefig(os.path.join(plot_folder, f'{file_name}_fft_latent_vector.png'))
 
 
 ########### training ###########

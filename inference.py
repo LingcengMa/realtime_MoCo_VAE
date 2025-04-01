@@ -52,7 +52,7 @@ else:
     Phi_rt_init_imag = Phi_rt_init.imag
     Phi_rt_init_con = np.concatenate((Phi_rt_init_real, Phi_rt_init_imag))
     Phi_rt_init_con = Phi_rt_init_con.transpose()
-    Phi_rt_init = torch.from_numpy(Phi_rt_init_con).float().to(device)
+    Phi_rt_init = torch.from_n umpy(Phi_rt_init_con).float().to(device)
     thetas_mu = (thetas - thetas.mean()) / thetas.std()
     thetas_mu = torch.from_numpy(thetas_mu).to(device).to(torch.float32)
     theta0 = torch.zeros_like(thetas_mu)
@@ -79,10 +79,11 @@ plt.xlabel("Value")
 plt.ylabel("Frequency")
 plt.savefig("./cine_plots/resp_distribution_GRE.png")
 
-# end of espiration at -0.25
-resp0 = -0.3076
+
+# end of espiration at -1.4
+resp0 = -1.4
 cardiac0 = 0.4660
-expiration_end = -0.25
+expiration_end = -1.4
 inspiration_end = 0.25
 resp_phase = 20
 

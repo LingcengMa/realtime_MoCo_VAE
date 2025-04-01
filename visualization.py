@@ -58,23 +58,30 @@ plt.savefig('./assets/latent_space_plot_GRE.png')
 # plt.figure(figsize=(9, 9))
 # plt.plot(amplitude*np.cos(phase), amplitude*np.sin(phase))
 # plt.savefig('./assets/latent_space_GRE.png')
-# cardiac_trajectory = []
+cardiac_trajectory = []
+cardiac1 = np.load("./SMS_output/ExtractToPython_0608_1_run2_cardiac1.npy")
+cardiac2 = np.load("./SMS_output/ExtractToPython_0608_1_run2_cardiac2.npy")
+
+cardiac_phase = np.arctan2(cardiac2, cardiac1)
+cardiac_amplitude = np.sqrt(cardiac1**2 + cardiac2**2)
+
+# plot cardiac phase over time
 
 
 if False:
 
-    for i in range(150, 300):
+    for i in range(0, 1000):
         plt.figure(figsize=(9, 9))
         
         # Plot the trajectory so far
-        plt.plot(cardiac1[150:i+1], cardiac2[150:i+1], 'b-', label='Trajectory')  # Trajectory in blue
+        plt.plot(cardiac1[0:i+1], cardiac2[0:i+1], 'b-', label='Trajectory')  # Trajectory in blue
         
         # Plot the current position
         plt.plot(cardiac1[i], cardiac2[i], 'ro', label='Current Position')  # Current position in red
         
         # Set limits and labels
-        plt.xlim(-1.5, 1.5)
-        plt.ylim(-1.5, 1.5)
+        plt.xlim(-3, 3)
+        plt.ylim(-3, 3)
         plt.xlabel('X')
         plt.ylabel('Y')
         
@@ -100,47 +107,47 @@ if False:
         plt.close()
         
     # Create the GIF
-    imageio.mimsave('./assets/cardiac_trajectory_GRE.gif', cardiac_trajectory, duration=0.001)
+    imageio.mimsave('./assets/cardiac_trajectory_0608.gif', cardiac_trajectory, duration=0.001)
     plt.figure(figsize=(9, 9))
     
-    # Plot the trajectory so far
-    plt.plot(cardiac1[150:300], cardiac2[150:300], 'b-', label='Trajectory')  # Trajectory in blue
+    # # Plot the trajectory so far
+    # plt.plot(cardiac1[0:1000], cardiac2[0:1000], 'b-', label='Trajectory')  # Trajectory in blue
 
-    # Generate points for the circle
-    x = amplitude * np.cos(phase)
-    y = amplitude * np.sin(phase)
+    # # Generate points for the circle
+    # x = amplitude * np.cos(phase)
+    # y = amplitude * np.sin(phase)
 
-    # Plot the circle
-    plt.plot(x, y, label='average cardiac cycle', color='red', linewidth=4)
+    # # Plot the circle
+    # plt.plot(x, y, label='average cardiac cycle', color='red', linewidth=4)
 
-    # Set equal scaling so the circle isn't skewed
-    plt.gca().set_aspect('equal', adjustable='box')
+    # # Set equal scaling so the circle isn't skewed
+    # plt.gca().set_aspect('equal', adjustable='box')
 
-    # Set limits and labels
-    plt.xlim(-1.5, 1.5)
-    plt.ylim(-1.5, 1.5)
-    plt.xlabel('Cardiac 1')
-    plt.ylabel('Cardiac 2')
+    # # Set limits and labels
+    # plt.xlim(-1.5, 1.5)
+    # plt.ylim(-1.5, 1.5)
+    # plt.xlabel('Cardiac 1')
+    # plt.ylabel('Cardiac 2')
         
-    # Place axes at (0, 0)
-    ax = plt.gca()
-    ax.spines['left'].set_position('zero')
-    ax.spines['bottom'].set_position('zero')
-    ax.spines['right'].set_color('none')
-    ax.spines['top'].set_color('none')
-    ax.xaxis.set_ticks_position('bottom')
-    ax.yaxis.set_ticks_position('left')
+    # # Place axes at (0, 0)
+    # ax = plt.gca()
+    # ax.spines['left'].set_position('zero')
+    # ax.spines['bottom'].set_position('zero')
+    # ax.spines['right'].set_color('none')
+    # ax.spines['top'].set_color('none')
+    # ax.xaxis.set_ticks_position('bottom')
+    # ax.yaxis.set_ticks_position('left')
 
-    # Show grid for better visualization (optional)
-    plt.grid(True)
+    # # Show grid for better visualization (optional)
+    # plt.grid(True)
         
-    # Add legend
-    plt.legend()
+    # # Add legend
+    # plt.legend()
         
-    # Save the plot as an image in the list
-    plt.savefig('plot_final.png')
+    # # Save the plot as an image in the list
+    # plt.savefig('plot_final.png')
 
-    for i in range(150,300):
+    for i in range(0,1000):
         os.remove(f'plot_{i}.png')
     
     
