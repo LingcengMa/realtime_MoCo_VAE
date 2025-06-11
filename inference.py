@@ -21,6 +21,7 @@ plt.rcParams["figure.dpi"] = 200
 from sklearn.feature_selection import mutual_info_regression
 import scipy.stats as stats
 import statsmodels.api as sm
+from scipy.interpolate import interp1d
 from scipy.interpolate import CubicSpline
 from scipy.io import savemat
 
@@ -37,7 +38,7 @@ if False:  # to improve: do this with a flag
     Phi_rt_init = mat["Phi_rt_init"]
 else:
     # data_file = '/home/xfang/Data/stemberg_donna/ExtractToPython.mat'
-    data_file = "cine_data/ExtractToPython_GRE.mat"
+    data_file = "/home/xfang/projects/CVAE_SMS/data/cine_data/ExtractToPython_GRE.mat"
     mat = mat73.loadmat(data_file)
     mat_data = mat["ExtractToPython"]
     Phi_rt_init = mat_data["Phi_rt_small"]
@@ -52,7 +53,7 @@ else:
     Phi_rt_init_imag = Phi_rt_init.imag
     Phi_rt_init_con = np.concatenate((Phi_rt_init_real, Phi_rt_init_imag))
     Phi_rt_init_con = Phi_rt_init_con.transpose()
-    Phi_rt_init = torch.from_n umpy(Phi_rt_init_con).float().to(device)
+    Phi_rt_init = torch.from_numpy(Phi_rt_init_con).float().to(device)
     thetas_mu = (thetas - thetas.mean()) / thetas.std()
     thetas_mu = torch.from_numpy(thetas_mu).to(device).to(torch.float32)
     theta0 = torch.zeros_like(thetas_mu)
@@ -68,71 +69,124 @@ latent_space_mu_card_full = latent_space_mu
 latent_space = model.reparameterize(latent_space_mu, latent_space_logvar)
 latent_space = latent_space.to("cpu").detach().numpy()
 latent_space_mu = latent_space_mu.to("cpu").detach().numpy()
-np.save("./cine_data/latent_GRE.npy", latent_space_mu)
-savemat("/home/xfang/Data/cine_data/latent_GRE.mat", {"latent": latent_space_mu})
+# np.save("./cine_data/latent_GRE.npy", latent_space_mu)
+# savemat("/home/xfang/Data/cine_data/latent_GRE.mat", {"latent": latent_space_mu})
 
 # plot the distribution of latent space
-resp = latent_space[:, 0]
-fig1 = plt.hist(resp, bins=100, edgecolor="black")
-plt.title("Respiratory Distribution")
-plt.xlabel("Value")
-plt.ylabel("Frequency")
-plt.savefig("./cine_plots/resp_distribution_GRE.png")
+resp = latent_space_mu[:, 0]
+resp_min = np.percentile(resp, 10)
+resp_max = np.percentile(resp, 90)
+counts, bins, patches = plt.hist(resp, bins=100, edgecolor="black")
+resp0_index = np.argmax(counts)
+bin_range = (bins[resp0_index], bins[resp0_index + 1])
+resp0 = (bin_range[0] + bin_range[1]) / 2
+
+cardiac1 = latent_space_mu[:,1]
+cardiac2 = latent_space_mu[:,2]
+
+card_amplitude = np.sqrt(cardiac1**2 + cardiac2**2)
+card_phase = np.arctan2(cardiac2, cardiac1)
+
+def average_cycle(cardiac1, cardiac2):
+    card_amplitude = np.sqrt(cardiac1**2 + cardiac2**2)
+    card_phase = np.arctan2(cardiac2, cardiac1)
+    left_phase = card_phase - 2*np.pi
+    right_phase = card_phase + 2*np.pi
+    padded_amplitude = np.concatenate((card_amplitude, card_amplitude, card_amplitude))
+    padded_phase = np.concatenate((left_phase, card_phase, right_phase))
+    lowess = sm.nonparametric.lowess
+    smoothed_cardiac = lowess(padded_amplitude, padded_phase, frac=0.3)
+    smoothed_phase = smoothed_cardiac[cardiac1.shape[0]:(2*cardiac1.shape[0]-1), 0]
+    smoothed_amplitude = smoothed_cardiac[cardiac1.shape[0]:(2*cardiac1.shape[0]-1), 1]
+    min_index = np.argmin(smoothed_amplitude)  # Index of min amplitude
+    min_phase = smoothed_phase[min_index]  # Corresponding phase
+    phase0 = min_phase
+    phase00 = smoothed_phase[min_index - 4]  # Phase at the previous point
+    unique_phase, unique_indices = np.unique(smoothed_phase, return_index=True)
+    unique_amplitude = smoothed_amplitude[unique_indices]  # Keep only unique amplitude
+    amplitude_function = interp1d(unique_phase, unique_amplitude, kind="cubic", fill_value="extrapolate")
+    return phase0, phase00, amplitude_function
+
+phase0, phase00, amplitude_function = average_cycle(cardiac1, cardiac2)
+
+cbins = 50
+rbins = 20
+contrast_num = 360
+conditional_input = 1
+conditional = theta0[:contrast_num]
 
 
-# end of espiration at -1.4
-resp0 = -1.4
-cardiac0 = 0.4660
-expiration_end = -1.4
-inspiration_end = 0.25
-resp_phase = 20
-
-card_average_GRE = np.load("./assets/card_average_GRE.npy")
-
-card_interp = CubicSpline(card_average_GRE[:, 0], card_average_GRE[:, 1])
-num_card_phase = 100
-card_phase = np.linspace(cardiac0, cardiac0 + 2 * np.pi, num_card_phase)
-amplitude = card_interp(card_phase)
-
-# pause respiratory
-latent_space_mu_card = torch.ones(num_card_phase, 3).to(device)
-latent_space_mu_card[:, 0] = resp0 * latent_space_mu_card[:, 0]
-latent_space_mu_card[:, 1] = torch.from_numpy(amplitude * np.cos(card_phase))
-latent_space_mu_card[:, 2] = torch.from_numpy(amplitude * np.sin(card_phase))
-recon_output_card = (
-    model.decode(latent_space_mu_card, theta0[:num_card_phase, :])
-    .to("cpu")
-    .detach()
-    .numpy()
-)  # NO REPARAMETERIZATION
-latent_space_mu_card_full[:, 0] = resp0 * torch.ones_like(
-    latent_space_mu_card_full[:, 0]
-)
-recon_output_card_full = (
-    model.decode(latent_space_mu_card_full, theta0).to("cpu").detach().numpy()
-)  # NO REPARAMETERIZATION
-
-# pause cardiac
-latent_space_mu_resp = torch.ones(resp_phase, 3).to(device)
-latent_space_mu_resp[:, 1] = torch.from_numpy(card_interp(0) * np.ones(resp_phase))
-latent_space_mu_resp[:, 2] = torch.zeros(resp_phase)
-latent_space_mu_resp[:, 0] = torch.linspace(inspiration_end, expiration_end, resp_phase)
-recon_output_resp = (
-    model.decode(latent_space_mu_resp, theta0[:resp_phase, :])
-    .to("cpu")
-    .detach()
-    .numpy()
-)  # NO REPARAMETERIZATION
+latent_space_mu_fitting = torch.ones(contrast_num*cbins*rbins, 3).to(device)
+resp_bins = torch.linspace(resp_min, resp_max, rbins)
+latent_space_mu_fitting[:,0] = resp_bins.repeat_interleave(contrast_num*cbins)
+card_phase_values = phase00 * torch.ones(cbins,1).to(device)
+card_phase_bins = card_phase_values.repeat_interleave(contrast_num).repeat(rbins)
+card_amplitude_resize = card_amplitude[::20][:50]
+card_amplitude_values = torch.from_numpy(card_amplitude_resize).to(device)
+card_amplitude_bins = card_amplitude_values.repeat_interleave(contrast_num).repeat(rbins)
+latent_space_mu_fitting[:,1] = card_amplitude_bins * torch.cos(card_phase_bins)
+latent_space_mu_fitting[:,2] = card_amplitude_bins * torch.sin(card_phase_bins)
+condition_fitting = conditional.repeat(cbins*rbins,1).to(device)
+phi4fitting = model.decode(latent_space_mu_fitting,condition_fitting).to("cpu").detach().numpy()
 
 savemat(
-    "/home/xfang/Data/cine_data/GRE.mat",
+    "/home/xfang/Data/cine_data/python_GRE_bloodpool.mat",
     {
-        "resp": recon_output_resp,
-        "card": recon_output_card,
         "realtime": recon_output,
-        "card_full": recon_output_card_full,
+        "phi4fitting": phi4fitting,
+        "latentspace": latent_space_mu,
+        "endofdiastole": phase0,
     },
 )
+
+## pause phase as phase0 
+
+# latent_space_mu_card = torch.ones(num_card_phase, 3).to(device)
+# latent_space_mu_card[:, 0] = resp0 * latent_space_mu_card[:, 0]
+# latent_space_mu_card[:, 1] = torch.from_numpy(amplitude * np.cos(card_phase))
+# latent_space_mu_card[:, 2] = torch.from_numpy(amplitude * np.sin(card_phase))
+
+
+
+# # pause respiratory
+# latent_space_mu_card = torch.ones(num_card_phase, 3).to(device)
+# latent_space_mu_card[:, 0] = resp0 * latent_space_mu_card[:, 0]
+# latent_space_mu_card[:, 1] = torch.from_numpy(amplitude * np.cos(card_phase))
+# latent_space_mu_card[:, 2] = torch.from_numpy(amplitude * np.sin(card_phase))
+# recon_output_card = (
+#     model.decode(latent_space_mu_card, theta0[:num_card_phase, :])
+#     .to("cpu")
+#     .detach()
+#     .numpy()
+# )  # NO REPARAMETERIZATION
+# latent_space_mu_card_full[:, 0] = resp0 * torch.ones_like(
+#     latent_space_mu_card_full[:, 0]
+# )
+# recon_output_card_full = (
+#     model.decode(latent_space_mu_card_full, theta0).to("cpu").detach().numpy()
+# )  # NO REPARAMETERIZATION
+
+# # pause cardiac
+# latent_space_mu_resp = torch.ones(resp_phase, 3).to(device)
+# latent_space_mu_resp[:, 1] = torch.from_numpy(card_interp(0) * np.ones(resp_phase))
+# latent_space_mu_resp[:, 2] = torch.zeros(resp_phase)
+# latent_space_mu_resp[:, 0] = torch.linspace(inspiration_end, expiration_end, resp_phase)
+# recon_output_resp = (
+#     model.decode(latent_space_mu_resp, theta0[:resp_phase, :])
+#     .to("cpu")
+#     .detach()
+#     .numpy()
+# )  # NO REPARAMETERIZATION
+
+# savemat(
+#     "/home/xfang/Data/cine_data/GRE.mat",
+#     {
+#         "resp": recon_output_resp,
+#         "card": recon_output_card,
+#         "realtime": recon_output,
+#         "card_full": recon_output_card_full,
+#     },
+# )
 
 
 ### pause respiratory ###

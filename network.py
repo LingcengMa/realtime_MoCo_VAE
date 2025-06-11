@@ -57,13 +57,12 @@ class Encoder(nn.Module):
         return z
 
     # the size of mu and kl
-
-
 class Decoder(nn.Module):
-    def __init__(self, latent_dims):
+    def __init__(self, latent_dims, conditional_size, feature_size):
         super(Decoder, self).__init__()
+        input_dim = latent_dims + conditional_size  # latent + scalar + conditional
         self.layers = nn.Sequential(
-            nn.Linear(latent_dims, 70),
+            nn.Linear(input_dim, 70),
             nn.ReLU(),
             nn.Linear(70, 100),
             nn.ReLU(),
@@ -71,10 +70,11 @@ class Decoder(nn.Module):
             nn.ReLU(),
             nn.Linear(50, 25),
             nn.ReLU(),
-            nn.Linear(25, 96),
+            nn.Linear(25, feature_size),
         )
 
-    def forward(self, z):
+    def forward(self, z_latent, c):
+        z = torch.cat([z_latent, c], dim=1)
         return self.layers(z)
 
 

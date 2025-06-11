@@ -158,9 +158,9 @@ def plot_latent_space(model, data, conditional, epoch):
         axs[i].legend(loc="upper right")
     plt.tight_layout()
     plt.title(f"Latent Space at Epoch {epoch}")
-    fig.savefig(
-        os.path.join(plot_folder, f"{file_name}_latent_vector at Epoch {epoch}.png")
-    )
+    # fig.savefig(
+    #     os.path.join(plot_folder, f"{file_name}_latent_vector at Epoch {epoch}.png")
+    # )
 
 
 def train_long(
@@ -227,102 +227,8 @@ class DecoderWrapper(nn.Module):
         return self.model.decode(z, c)  # Call the decode method
 
 
-# if False: #to improve: do this with a flag
-#     data_file = os.path.join(data_folder, 'realtime_GT_imgs.mat')
-#     mat = scipy.io.loadmat(data_file)
-#     Phi_rt_init = mat['Phi_rt_init']
-#     seg_file = os.path.join(data_folder, 'TI.mat')
-#     segidx = scipy.io.loadmat(seg_file)
-#     segidx = segidx['Segidx']
-#     binning_file = os.path.join(data_folder, 'binning_GT.mat')
-#     binning_file = scipy.io.loadmat(binning_file)
-#     hidx = binning_file['Hidx'] # Cardiac
-#     ridx = binning_file['Ridx'] # Respiratory
-#     # create simulated t2 prep signal
-#     array_1 = np.ones(360)
-#     array_2 = 2 * array_1
-#     array_3 = 3 * array_1
-#     array_4 = 4 * array_1
-#     array_5 = 5 * array_1
-#     array = np.concatenate((array_1, array_2, array_3),axis=0)
-#     array = np.concatenate((array, array_4, array_5),axis=0)
-#     array = np.tile(array, 7)
 
-#     ridx_mu = (ridx - ridx.mean())/ridx.std()
-#     hidx_mu = (hidx - hidx.mean())/hidx.std()
-#     Segidx_mu = (segidx - segidx.mean())/segidx.std()
-#     # ramp_latent_mu = (array-array.mean())/array.std()
-#     wallClock_mu = (array - array.mean())/array.std()
-#     # thetas_mu = (thetas - thetas.mean())/thetas.std()
-
-# else :
-#     # data_file = '/home/xfang/Data/Multitasking_SMS/Human_SMS_20210528/2D_SMS_DATA/ExtractToPython_2FA_run2.mat'
-#     data_file = './data/ExtractToPython_0528_run1.mat'
-#     # data_file = '/home/xfang/Data/stemberg_donna/ExtractToPython.mat'
-#     mat = mat73.loadmat(data_file)
-#     mat_data =mat['ExtractToPython']
-#     Phi_rt_init = mat_data['Phi_rt_small']
-#     Segidx = mat_data['Segidx'].reshape(-1, 1)
-#     wallClock = mat_data['wallClock'].reshape(-1, 1)
-#     thetas = mat_data['thetas'].reshape(-1, 1)
-
-# hidx = mat['Hidx'] # Cardiac
-# ridx = mat['Ridx'] # Respiratory
-# thetas = mat['thetas'] # Thetas
-
-if False:
-    data_file = "./data/ExtractToPython_0528_run1.mat"
-    mat = mat73.loadmat(data_file)
-    mat_data = mat["ExtractToPython"]
-    Phi_rt_init = mat_data["Phi_rt_small"]
-    Segidx = mat_data["Segidx"].reshape(-1, 1)
-    wallClock = mat_data["wallClock"].reshape(-1, 1)
-    thetas = mat_data["thetas"].reshape(-1, 1)
-    flipAngles = mat_data["flipAngle"].reshape(-1, 1)
-
-    Segidx_mu = (Segidx - Segidx.mean()) / Segidx.std()
-    wallClock_mu = (wallClock - wallClock.mean()) / wallClock.std()
-    thetas_mu = (thetas - thetas.mean()) / thetas.std()
-    flipAngles_mu = (flipAngles - flipAngles.mean()) / flipAngles.std()
-    wallClock_mu = torch.from_numpy(wallClock_mu).to(device)
-    Segidx_mu = torch.from_numpy(Segidx_mu).to(device)
-    thetas_mu = torch.from_numpy(thetas_mu).to(device)
-    flipAngles_mu = torch.from_numpy(flipAngles_mu).to(device)
-    theta0 = torch.zeros_like(thetas_mu)
-    t1t2_normalized = torch.cat([Segidx_mu, wallClock_mu], dim=1).to(torch.float32)
-    t1t2theta = torch.cat([Segidx_mu, wallClock_mu, thetas_mu], dim=1).to(torch.float32)
-    t1t2theta0 = torch.cat([Segidx_mu, wallClock_mu, theta0], dim=1).to(torch.float32)
-    t1t2fa = torch.cat([Segidx_mu, wallClock_mu, flipAngles_mu], dim=1).to(
-        torch.float32
-    )
-    t1t2fatheta = torch.cat(
-        [Segidx_mu, wallClock_mu, flipAngles_mu, thetas_mu], dim=1
-    ).to(torch.float32)
-    t1t2fatheta0 = torch.cat(
-        [Segidx_mu, wallClock_mu, flipAngles_mu, theta0], dim=1
-    ).to(torch.float32)
-
-# KLD indices to test
-kld_indices = [
-    1e-30,
-    1e-27,
-    1e-24,
-    1e-21,
-    1e-18,
-    1e-15,
-    1e-12,
-    1e-9,
-    1e-6,
-    1e-3,
-    1,
-    1e3,
-    1e6,
-    1e9,
-    1e12,
-]
-lr_grid = [1e-2, 1e-4, 1e-6, 1e-8, 1e-10]
-
-data_folder = "./sms_data_test"
+data_folder = "./data/phantom_data"
 plot_folder = "./latent_plots"
 model_folder = "./SMS_models"
 assets_folder = "./SMS_assest"
@@ -403,7 +309,7 @@ for file_name in os.listdir(data_folder):
         model.apply(reset_weights)
 
         optimizer = optim.Adam(model.parameters(), lr=1e-4)
-        max_epochs = 60000
+        max_epochs = 30000
         epoch_plot_step = 10
         checkpoint = 10000
 
@@ -412,11 +318,15 @@ for file_name in os.listdir(data_folder):
             model, optimizer, max_epochs, epoch_plot_step, Phi_rt_init, t1t2fatheta
         )
         # Save the model after training on the current dataset
+        plot_latent_space(model, Phi_rt_init, t1t2fatheta, max_epochs)
+        
         torch.save(
             model.state_dict(),
             os.path.join(model_folder, f"model_{file_name}.pth"),
         )
+        
         print(f"Model saved as model_{file_name}.pth")
+        
         # losses, NRMSE = train_long(model, optimizer, max_epochs, checkpoint, epoch_plot_step, Phi_rt_init, t1t2fatheta)
         # model = torch.load('SMS_models/model_ExtractToPython_0601_run1.pt')
         # example_c = torch.randn(1, 4).to(device)
