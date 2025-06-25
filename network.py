@@ -57,12 +57,13 @@ class Encoder(nn.Module):
         return z
 
     # the size of mu and kl
+
+
 class Decoder(nn.Module):
-    def __init__(self, latent_dims, conditional_size, feature_size):
+    def __init__(self, latent_dims, class_size, feature_size):
         super(Decoder, self).__init__()
-        input_dim = latent_dims + conditional_size  # latent + scalar + conditional
         self.layers = nn.Sequential(
-            nn.Linear(input_dim, 70),
+            nn.Linear(latent_dims + class_size + 1, 70),
             nn.ReLU(),
             nn.Linear(70, 100),
             nn.ReLU(),
@@ -73,9 +74,8 @@ class Decoder(nn.Module):
             nn.Linear(25, feature_size),
         )
 
-    def forward(self, z_latent, c):
-        z = torch.cat([z_latent, c], dim=1)
-        return self.layers(z)
+    def forward(self, z, c):
+        return self.layers(z, c)
 
 
 class VAE(nn.Module):
@@ -290,10 +290,11 @@ class CVAE_BP(nn.Module):
 
 
 class CVAE_BP_HT(nn.Module):
-    def __init__(self, feature_size, latent_dims, class_size):
+    def __init__(self, feature_size, latent_dims, class_size, sampling_rate):
         super(CVAE_BP_HT, self).__init__()
         self.feature_size = feature_size
         self.class_size = class_size
+        self.sampling_rate = sampling_rate
 
         # encode
         self.fc1 = nn.Linear(feature_size + class_size, 25)
@@ -315,13 +316,14 @@ class CVAE_BP_HT(nn.Module):
 
     # def band_pass_filter(self, z, lower_limit, upper_limit):
     #     z_fft = torch.fft.fft(z, dim=-1)
-    #     z_freq = torch.fft.fftfreq(len(z), d=0.00712, device = 'cuda') #
+    #     # z_freq = torch.fft.fftfreq(len(z), d=0.00712, device = 'cuda') #
+    #     z_freq = torch.fft.fftfreq(len(z), d=0.0568, device = 'cuda')
     #     z_f = torch.where((abs(z_freq) >= lower_limit) & (abs(z_freq) <= upper_limit), z_fft, torch.zeros_like(z_fft))
     #     z_filtered = torch.fft.ifft(z_f, dim=-1).real
     #     return z_filtered
 
-    def band_pass_filter(self, z, lower_limit, upper_limit):
-        d = 0.00712  # sampling rate
+    def band_pass_filter(self, z, lower_limit, upper_limit, sampling_rate):
+        d = sampling_rate  # sampling rate
         num_extend = torch.ceil(torch.tensor(1 / (2 * d * upper_limit))).int()
         extended_z = torch.cat(
             [
@@ -344,17 +346,18 @@ class CVAE_BP_HT(nn.Module):
     # def low_pass_filter(self, z, upper_limit):
     #     # Keep only the latent variables within the specified frequency band
     #     z_fft = torch.fft.fft(z, dim=-1)
-    #     z_freq = torch.fft.fftfreq(len(z), d=0.00712, device = 'cuda') #
+    #     # z_freq = torch.fft.fftfreq(len(z), d=0.00712, device = 'cuda') #
+    #     z_freq = torch.fft.fftfreq(len(z), d=0.0568, device = 'cuda')
     #     z_f = torch.where((abs(z_freq) <= upper_limit), z_fft, torch.zeros_like(z_fft))
     #     z_filtered = torch.fft.ifft(z_f, dim=-1).real
     #     z_filtered = z_filtered - z_filtered.mean()
     #     return z_filtered
 
-    def low_pass_filter(self, z, upper_limit):  # extend the input
+    def low_pass_filter(self, z, upper_limit, sampling_rate):  # extend the input
         # Keep only the latent variables within the specified frequency band
         # extend the input at the beginning and end
         # extend by X = ceil(1/(2*d*upper_limit))
-        d = 0.00712  # sampling rate
+        d = sampling_rate  # sampling rate
         num_extend = torch.ceil(torch.tensor(1 / (2 * d * upper_limit))).int()
         extended_z = torch.cat(
             [
@@ -392,7 +395,7 @@ class CVAE_BP_HT(nn.Module):
         hilbert_transformed_signal = analytic_signal.imag
         return hilbert_transformed_signal
 
-    def encode(self, x, c):  # Q(z|x, c)
+    def encode(self, x, c, sampling_rate):  # Q(z|x, c)
         """
         x: (bs, feature_size)
         c: (bs, class_size)
@@ -406,14 +409,14 @@ class CVAE_BP_HT(nn.Module):
         z_var = self.fc52(h4)
         u1 = z_mu[:, 0]
         u2 = z_mu[:, 1]
-        u1_filtered = self.low_pass_filter(u1, 0.67)
-        u2_filtered = self.band_pass_filter(u2, 0.67, 2.5)
+        u1_filtered = self.low_pass_filter(u1, 0.67, sampling_rate)
+        u2_filtered = self.band_pass_filter(u2, 0.67, 2.5, sampling_rate)
         u3 = self.hilbert_transform(u2_filtered)
         z_mu = torch.stack((u1_filtered, u2_filtered, u3), dim=1)
         z_var = torch.stack(
             (z_var[:, 0], z_var[:, 1], z_var[:, 1]), dim=1
         )  # set the variance of the Hilbert transform to var2
-        return z_mu, z_var
+        return z_mu, z_var 
 
     def reparameterize(self, mu, logvar):
         std = torch.exp(0.5 * logvar)
@@ -503,4 +506,4 @@ class DAE(nn.Module):
         z = self.reparameterize(mu, logvar)
         return self.decode(z, c), mu, logvar
     
-    
+

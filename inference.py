@@ -10,8 +10,7 @@ import torch.utils
 import torch.distributions
 import torch.optim as optim
 from tqdm import tqdm
-from network import VAE, CVAE, CVAE_BP, CVAE_BP_HT
-import torchvision
+from network import CVAE_BP_HT
 import mat73
 import numpy as np
 import scipy
@@ -38,13 +37,13 @@ if False:  # to improve: do this with a flag
     Phi_rt_init = mat["Phi_rt_init"]
 else:
     # data_file = '/home/xfang/Data/stemberg_donna/ExtractToPython.mat'
-    data_file = "/home/xfang/projects/CVAE_SMS/data/cine_data/ExtractToPython_GRE.mat"
+    data_file = "data/cine_GRE/ExtractToPython_1.mat"
     mat = mat73.loadmat(data_file)
     mat_data = mat["ExtractToPython"]
     Phi_rt_init = mat_data["Phi_rt_small"]
     Segidx = mat_data["Segidx"].reshape(-1, 1)
     wallClock = mat_data["wallClock"].reshape(-1, 1)
-    flipAngles = mat_data["flipAngle"].reshape(-1, 1)
+    # flipAngles = mat_data["flipAngle"].reshape(-1, 1)
     thetas = mat_data["thetas"].reshape(-1, 1)
 
     Phi_rt_init = Phi_rt_init / Phi_rt_init[:, 0].std()  # Normalize whole
@@ -60,7 +59,7 @@ else:
 
 feature_size = Phi_rt_init.size()[1]
 model = CVAE_BP_HT(feature_size, latent_dims=2, class_size=1).to(device)
-model.load_state_dict(torch.load("cine_models/model_ExtractToPython_GRE.pth"))
+model.load_state_dict(torch.load("cine_models/model_ExtractToPython_1.pt"))
 
 recon_output_ec, latent_space_mu, latent_space_logvar = model(Phi_rt_init, thetas_mu)
 recon_output = model.decode(latent_space_mu, theta0).to("cpu").detach().numpy()
@@ -85,6 +84,9 @@ cardiac1 = latent_space_mu[:,1]
 cardiac2 = latent_space_mu[:,2]
 
 card_amplitude = np.sqrt(cardiac1**2 + cardiac2**2)
+average_amplitude = np.mean(card_amplitude)
+max_amplitude = np.percentile(card_amplitude, 99)
+min_amplitude = np.percentile(card_amplitude, 1)
 card_phase = np.arctan2(cardiac2, cardiac1)
 
 def average_cycle(cardiac1, cardiac2):
@@ -129,6 +131,44 @@ latent_space_mu_fitting[:,2] = card_amplitude_bins * torch.sin(card_phase_bins)
 condition_fitting = conditional.repeat(cbins*rbins,1).to(device)
 phi4fitting = model.decode(latent_space_mu_fitting,condition_fitting).to("cpu").detach().numpy()
 
+recon_output_old = np.load("assets/ExtractToPython_GRE_recon_output.npy")
+
+# fixed phase
+num_card_phase = 100
+latent_space_mu_phase = torch.ones(num_card_phase, 3).to(device)
+latent_space_mu_phase[:, 0] = resp0 * latent_space_mu_phase[:, 0]
+cardiac_motion = np.linspace(min_amplitude, max_amplitude, num_card_phase)
+latent_space_mu_phase[:, 1] = torch.from_numpy(cardiac_motion * np.cos(phase0))
+latent_space_mu_phase[:, 2] = torch.from_numpy(cardiac_motion * np.sin(phase0))
+card_fixed_phase = (
+    model.decode(latent_space_mu_phase, theta0[:num_card_phase, :])
+    .to("cpu")
+    .detach()
+    .numpy()
+)  # NO REPARAMETERIZATION
+
+# average amplitude
+latent_space_mu_amplitude = torch.ones(num_card_phase, 3).to(device)
+latent_space_mu_amplitude[:, 0] = resp0 * latent_space_mu_amplitude[:, 0]
+phase_values = np.linspace(phase0, phase0 + 2 * np.pi, num_card_phase)
+latent_space_mu_amplitude[:, 1] = torch.from_numpy(average_amplitude * np.cos(phase_values))
+latent_space_mu_amplitude[:, 2] = torch.from_numpy(average_amplitude * np.sin(phase_values))
+card_fixed_amplitude = (
+    model.decode(latent_space_mu_amplitude, theta0[:num_card_phase, :])
+    .to("cpu")
+    .detach()
+    .numpy()
+)  # NO REPARAMETERIZATION
+
+
+# full cardiac cycle pausing respiratory
+latent_space_mu_card_full[:, 0] = resp0 * torch.ones_like(
+    latent_space_mu_card_full[:, 0]
+)
+recon_output_card_full = (
+    model.decode(latent_space_mu_card_full, theta0).to("cpu").detach().numpy()
+)  # NO REPARAMETERIZATION
+
 savemat(
     "/home/xfang/Data/cine_data/python_GRE_bloodpool.mat",
     {
@@ -136,15 +176,12 @@ savemat(
         "phi4fitting": phi4fitting,
         "latentspace": latent_space_mu,
         "endofdiastole": phase0,
+        "card_phase": card_fixed_phase,
+        "card_amplitude": card_fixed_amplitude,
+        "card_full": recon_output_card_full,
     },
 )
 
-## pause phase as phase0 
-
-# latent_space_mu_card = torch.ones(num_card_phase, 3).to(device)
-# latent_space_mu_card[:, 0] = resp0 * latent_space_mu_card[:, 0]
-# latent_space_mu_card[:, 1] = torch.from_numpy(amplitude * np.cos(card_phase))
-# latent_space_mu_card[:, 2] = torch.from_numpy(amplitude * np.sin(card_phase))
 
 
 

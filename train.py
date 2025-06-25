@@ -1,7 +1,6 @@
 import os
 import sys
 import torch
-
 # torch.manual_seed(0)
 import torch.nn as nn
 import torch.nn.functional as F
@@ -12,12 +11,11 @@ import torch.optim as optim
 import mat73
 from pathlib import Path
 from tqdm import tqdm
-from network import CVAE_BP_HT
+from network import CVAE_BP_HT, CVAE_BP
 from torchvision import datasets
 import numpy as np
 import scipy
 import matplotlib.pyplot as plt
-
 plt.rcParams["figure.dpi"] = 200
 torch.autograd.set_detect_anomaly(True)
 
@@ -26,7 +24,6 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 
 # data_init
 path = os.path.dirname(os.path.realpath(__file__))
-
 
 # functions
 def loss_function_BP(recon_x, x, mu, mu_filtered, logvar):
@@ -45,7 +42,9 @@ def loss_function(recon_x, x, mu, logvar):
 def loss_function_KLD(recon_x, x, mu, logvar, kld_index):
     BCE = F.mse_loss(recon_x, x)
     KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-    return BCE + kld_index * KLD
+    return (
+        BCE + kld_index * KLD
+    )  
 
 
 def low_pass_filter(x, upper_limit):
@@ -79,11 +78,14 @@ def reset_weights(m):
         # torch.nn.init.kaiming_uniform_(m.weight,0,"fan_in","leaky_relu")
         if m.bias is not None:
             m.bias.data.fill_(0.01)
-
-
+            
 ### training functions ###
 def train_model(
-    model, optimizer, max_epochs, epoch_plot_step, Phi_rt_init, conditional_input
+    model, optimizer, 
+    max_epochs, 
+    epoch_plot_step, 
+    Phi_rt_init, 
+    conditional_input
 ):
     losses = []
     NRMSE = []
@@ -103,11 +105,12 @@ def train_model(
             mse = ((recon_x - Phi_rt_init) ** 2).sum()
             nrmse_ = torch.sqrt(mse / total)
             NRMSE.append(nrmse_.detach().cpu().numpy())
-            pbar.set_description(f"train_loss: {train_loss:.3e}, NRMSE: {nrmse_:.4f}")
+            pbar.set_description(
+                f"train_loss: {train_loss:.3e}, NRMSE: {nrmse_:.4f}"
+            )
             pbar.update(epoch_plot_step)
     pbar.close()
     return losses, NRMSE
-
 
 ### evaluation mode ###
 def train_model_kld(
@@ -138,40 +141,32 @@ def train_model_kld(
             mse = ((recon_x - Phi_rt_init) ** 2).sum()
             nrmse_ = torch.sqrt(mse / total)
             NRMSE.append(nrmse_.detach().cpu().numpy())
-            pbar.set_description(f"train_loss: {train_loss:.3e}, NRMSE: {nrmse_:.4f}")
+            pbar.set_description(
+                f"train_loss: {train_loss:.3e}, NRMSE: {nrmse_:.4f}"
+            )
             pbar.update(epoch_plot_step)
     pbar.close()
     return losses, NRMSE
 
-
+    
 def plot_latent_space(model, data, conditional, epoch):
     model.eval()
     with torch.no_grad():
-        _, z, _ = model(data, conditional)
-
-    z = z.to("cpu").detach().numpy()
-
+        _, z, _ = model(data,conditional)
+    
+    z = z.to('cpu').detach().numpy()
+    
     fig, axs = plt.subplots(1, 3, figsize=(30, 10))
     axs = axs.flatten()  # Flatten the 2x2 array of axes for easy indexing
     for i in range(3):
-        axs[i].plot(z[:4000, i], label=f"Latent vector {i+1}")
+        axs[i].plot(z[:4000, i], label=f'Latent vector {i+1}')
         axs[i].legend(loc="upper right")
     plt.tight_layout()
     plt.title(f"Latent Space at Epoch {epoch}")
-    # fig.savefig(
-    #     os.path.join(plot_folder, f"{file_name}_latent_vector at Epoch {epoch}.png")
-    # )
+    fig.savefig(os.path.join(plot_folder, f'{file_name}_latent_vector at Epoch {epoch}.png'))
+    
 
-
-def train_long(
-    model,
-    optimizer,
-    max_epochs,
-    checkpoint,
-    epoch_plot_step,
-    Phi_rt_init,
-    conditional_input,
-):
+def train_long(model, optimizer, max_epochs, checkpoint, epoch_plot_step, Phi_rt_init, conditional_input):
     losses = []
     NRMSE = []
     total = (Phi_rt_init**2).sum()
@@ -191,7 +186,9 @@ def train_long(
             mse = ((recon_x - Phi_rt_init) ** 2).sum()
             nrmse_ = torch.sqrt(mse / total)
             NRMSE.append(nrmse_.detach().cpu().numpy())
-            pbar.set_description(f"train_loss: {train_loss:.3e}, NRMSE: {nrmse_:.4f}")
+            pbar.set_description(
+                f"train_loss: {train_loss:.3e}, NRMSE: {nrmse_:.4f}"
+            )
             pbar.update(epoch_plot_step)
         if (epoch % checkpoint) == 0:
             torch.save(
@@ -201,6 +198,7 @@ def train_long(
             plot_latent_space(model, Phi_rt_init, conditional_input, epoch)
     pbar.close()
     return losses, NRMSE
+    
 
 
 def evaluate_model(model, Phi_rt_init_val, conditional_input):
@@ -217,7 +215,6 @@ def evaluate_model(model, Phi_rt_init_val, conditional_input):
         nrmse = torch.sqrt(mse / total)
     return nrmse
 
-
 class DecoderWrapper(nn.Module):
     def __init__(self, model):
         super().__init__()
@@ -227,11 +224,90 @@ class DecoderWrapper(nn.Module):
         return self.model.decode(z, c)  # Call the decode method
 
 
+# if False: #to improve: do this with a flag
+#     data_file = os.path.join(data_folder, 'realtime_GT_imgs.mat')
+#     mat = scipy.io.loadmat(data_file)
+#     Phi_rt_init = mat['Phi_rt_init']
+#     seg_file = os.path.join(data_folder, 'TI.mat')
+#     segidx = scipy.io.loadmat(seg_file)
+#     segidx = segidx['Segidx']
+#     binning_file = os.path.join(data_folder, 'binning_GT.mat')
+#     binning_file = scipy.io.loadmat(binning_file)
+#     hidx = binning_file['Hidx'] # Cardiac
+#     ridx = binning_file['Ridx'] # Respiratory
+#     # create simulated t2 prep signal
+#     array_1 = np.ones(360)
+#     array_2 = 2 * array_1
+#     array_3 = 3 * array_1
+#     array_4 = 4 * array_1
+#     array_5 = 5 * array_1
+#     array = np.concatenate((array_1, array_2, array_3),axis=0)
+#     array = np.concatenate((array, array_4, array_5),axis=0)
+#     array = np.tile(array, 7)
 
-data_folder = "./data/phantom_data"
-plot_folder = "./latent_plots"
-model_folder = "./SMS_models"
-assets_folder = "./SMS_assest"
+#     ridx_mu = (ridx - ridx.mean())/ridx.std()
+#     hidx_mu = (hidx - hidx.mean())/hidx.std()
+#     Segidx_mu = (segidx - segidx.mean())/segidx.std()
+#     # ramp_latent_mu = (array-array.mean())/array.std()
+#     wallClock_mu = (array - array.mean())/array.std()
+#     # thetas_mu = (thetas - thetas.mean())/thetas.std()
+
+# else :
+#     # data_file = '/home/xfang/Data/Multitasking_SMS/Human_SMS_20210528/2D_SMS_DATA/ExtractToPython_2FA_run2.mat'
+#     data_file = './data/ExtractToPython_0528_run1.mat'
+#     # data_file = '/home/xfang/Data/stemberg_donna/ExtractToPython.mat'
+#     mat = mat73.loadmat(data_file)
+#     mat_data =mat['ExtractToPython']
+#     Phi_rt_init = mat_data['Phi_rt_small']
+#     Segidx = mat_data['Segidx'].reshape(-1, 1)
+#     wallClock = mat_data['wallClock'].reshape(-1, 1)
+#     thetas = mat_data['thetas'].reshape(-1, 1)
+
+# hidx = mat['Hidx'] # Cardiac
+# ridx = mat['Ridx'] # Respiratory
+# thetas = mat['thetas'] # Thetas
+
+if False:
+    data_file = "./data/ExtractToPython_0528_run1.mat"
+    mat = mat73.loadmat(data_file)
+    mat_data = mat["ExtractToPython"]
+    Phi_rt_init = mat_data["Phi_rt_small"]
+    Segidx = mat_data["Segidx"].reshape(-1, 1)
+    wallClock = mat_data["wallClock"].reshape(-1, 1)
+    thetas = mat_data["thetas"].reshape(-1, 1)
+    flipAngles = mat_data["flipAngle"].reshape(-1, 1)
+
+    Segidx_mu = (Segidx - Segidx.mean()) / Segidx.std()
+    wallClock_mu = (wallClock - wallClock.mean()) / wallClock.std()
+    thetas_mu = (thetas - thetas.mean()) / thetas.std()
+    flipAngles_mu = (flipAngles - flipAngles.mean()) / flipAngles.std()
+    wallClock_mu = torch.from_numpy(wallClock_mu).to(device)
+    Segidx_mu = torch.from_numpy(Segidx_mu).to(device)
+    thetas_mu = torch.from_numpy(thetas_mu).to(device)
+    flipAngles_mu = torch.from_numpy(flipAngles_mu).to(device)
+    theta0 = torch.zeros_like(thetas_mu)
+    t1t2_normalized = torch.cat([Segidx_mu, wallClock_mu], dim=1).to(torch.float32)
+    t1t2theta = torch.cat([Segidx_mu, wallClock_mu, thetas_mu], dim=1).to(torch.float32)
+    t1t2theta0 = torch.cat([Segidx_mu, wallClock_mu, theta0], dim=1).to(torch.float32)
+    t1t2fa = torch.cat([Segidx_mu, wallClock_mu, flipAngles_mu], dim=1).to(
+        torch.float32
+    )
+    t1t2fatheta = torch.cat(
+        [Segidx_mu, wallClock_mu, flipAngles_mu, thetas_mu], dim=1
+    ).to(torch.float32)
+    t1t2fatheta0 = torch.cat(
+        [Segidx_mu, wallClock_mu, flipAngles_mu, theta0], dim=1
+    ).to(torch.float32)
+
+# KLD indices to test
+kld_indices = [1e-30, 1e-27, 1e-24, 1e-21, 1e-18, 1e-15, 1e-12, 1e-9, 1e-6, 1e-3, 1, 1e3, 1e6, 1e9, 1e12]
+lr_grid = [1e-2, 1e-4, 1e-6, 1e-8, 1e-10]
+
+data_folder = "data/cine_GRE"
+# data_folder = "/home/xfang/Data/Multitasking_SMS/Human_SMS_20210618_2/2D_SMS_DATA/"
+plot_folder = "./cine_plots"
+model_folder = "./cine_models"
+assets_folder = "./assets"
 # model_folder = './cine_models'
 # assets_folder = './assets'
 
@@ -258,12 +334,13 @@ for file_name in os.listdir(data_folder):
     Segidx = mat_data["Segidx"].reshape(-1, 1)
     wallClock = mat_data["wallClock"].reshape(-1, 1)
     thetas = mat_data["thetas"].reshape(-1, 1)
-
+    
     if "flipAngle" in mat_data:
         flipAngles = mat_data["flipAngle"].reshape(-1, 1)
         IFdualFA = True
     else:
         flipAngles = np.zeros_like(thetas)
+        
 
     ### fixing wallclock ###
     wallClock = (wallClock - 1) % 5 + 1
@@ -301,67 +378,66 @@ for file_name in os.listdir(data_folder):
     Phi_rt_init_con = np.concatenate((Phi_rt_init_real, Phi_rt_init_imag))
     Phi_rt_init_con = Phi_rt_init_con.transpose()
     Phi_rt_init = torch.from_numpy(Phi_rt_init_con).float().to(device)
-
+    
     if True:
         #### training ####
         feature_size = Phi_rt_init.size()[1]
-        model = CVAE_BP_HT(feature_size, latent_dims=2, class_size=4).to(device)
+        model = CVAE_BP_HT(feature_size, latent_dims=2, class_size=1).to(device)
         model.apply(reset_weights)
 
         optimizer = optim.Adam(model.parameters(), lr=1e-4)
-        max_epochs = 30000
+        max_epochs = 2000
         epoch_plot_step = 10
-        checkpoint = 10000
-
+        # checkpoint = 10000
+        
         print(f"Training on Data File: {file_name}")
         losses, NRMSE = train_model(
-            model, optimizer, max_epochs, epoch_plot_step, Phi_rt_init, t1t2fatheta
-        )
-        # Save the model after training on the current dataset
-        plot_latent_space(model, Phi_rt_init, t1t2fatheta, max_epochs)
-        
-        torch.save(
-            model.state_dict(),
-            os.path.join(model_folder, f"model_{file_name}.pth"),
-        )
-        
-        print(f"Model saved as model_{file_name}.pth")
-        
-        # losses, NRMSE = train_long(model, optimizer, max_epochs, checkpoint, epoch_plot_step, Phi_rt_init, t1t2fatheta)
+                model,
+                optimizer,
+                max_epochs,
+                epoch_plot_step,
+                Phi_rt_init,
+                thetas_mu
+            )
+            # Save the model after training on the current dataset
+        torch.save(model.state_dict(), os.path.join(model_folder, f"model_{file_name}.pt"))
+        print(f"Model saved as model_{file_name}.pt") 
+        # # losses, NRMSE = train_long(model, optimizer, max_epochs, checkpoint, epoch_plot_step, Phi_rt_init, t1t2fatheta)
         # model = torch.load('SMS_models/model_ExtractToPython_0601_run1.pt')
         # example_c = torch.randn(1, 4).to(device)
         # example_z= torch.randn(1, 3).to(device)
         # Decoder = DecoderWrapper(model).to(device)
-
+        
+        
         # torch.onnx.export(
-        #     Decoder,
-        #     (example_z, example_c),
-        #     '/home/xfang/Data/Multitasking_SMS/Human_SMS_20210601/2D_SMS_DATA/cvae_decoder.onnx',
-        #     input_names=['latent_input', 'conditional_input'],
-        #     output_names=['output'],
+        #     Decoder,  
+        #     (example_z, example_c), 
+        #     '/home/xfang/Data/Multitasking_SMS/Human_SMS_20210601/2D_SMS_DATA/cvae_decoder.onnx',  
+        #     input_names=['latent_input', 'conditional_input'],  
+        #     output_names=['output'],  
         #     dynamic_axes={
-        #         'latent_input': {0: 'batch_size'},
+        #         'latent_input': {0: 'batch_size'},  
         #         'conditional_input': {0: 'batch_size'},
         #         'output': {0: 'batch_size'}
         #     }
         # )
-
+        
+        
+     
         # traced_model = torch.jit.trace_module(model.decode, (example_z, example_conditions))
         # torch.jit.save(traced_model, os.path.join(model_folder, f"traced_decoder_{file_name}.pt"),)
         # model.eval()
-
-        with torch.no_grad():
-            mu, logvar = model.encode(
-                Phi_rt_init, t1t2fatheta
-            )  # Get latent space representations
+        
+        # with torch.no_grad():
+        #     mu, logvar = model.encode(Phi_rt_init, t1t2fatheta)  # Get latent space representations
         # torch.save(mu, f"{file_name}_latent_vectors.pt")
-
+        
         # mu = mu.to('cpu').detach().numpy()
         # scipy.io.savemat(f"/home/xfang/Data/Multitasking_SMS/Human_SMS_20210601/2D_SMS_DATA/{file_name}_latent_vectors.mat", {"latent": mu})
-
+        
         # output = Decoder(mu, t1t2fatheta0).detach().cpu().numpy()
         # recon_output = model.decode(mu, t1t2fatheta0).detach().cpu().numpy()
-
+        
         # fig2, axs2 = plt.subplots(2, 4, figsize=(20, 20))
         # axs2 = axs2.flatten()  # Flatten the 2x2 array of axes for easy indexing
         # for i in range(4):
@@ -375,6 +451,10 @@ for file_name in os.listdir(data_folder):
         # plt.tight_layout()
         # fig2.savefig('testtest.png')
 
+        
+        
+        
+                
     else:
         #### training and validation ###
         total_size = Phi_rt_init.size(0)
@@ -386,7 +466,7 @@ for file_name in os.listdir(data_folder):
 
         conditional_train = t1t2fatheta[:train_size]
         conditional_val = t1t2fatheta[train_size:]
-
+        
         # conditional_train = t1t2fatheta[:train_size]
         # conditional_val = t1t2fatheta[train_size:]
 
@@ -396,14 +476,14 @@ for file_name in os.listdir(data_folder):
 
         # for lr_value in lr_grid:
         optimizer = optim.Adam(model.parameters(), lr=0.0001)
-        # best lr = 0.0001 1e-4
-
+            #best lr = 0.0001 1e-4
+            
         max_epochs = 40000
         epoch_plot_step = 10
         best_nrmse = 1
         train_nrmse_list = []
         val_nrmse_list = []
-
+    
         for kld_index in kld_indices:
             model.apply(reset_weights)
             print(f"Training on Data File: {file_name} with KLD Index: {kld_index}")
@@ -421,29 +501,23 @@ for file_name in os.listdir(data_folder):
                 model.state_dict(),
                 os.path.join(model_folder, f"model_{file_name}_kld_{kld_index}.pth"),
             )
-
-            recon_output_ec, latent_space_mu, latent_space_logvar = model(
-                Phi_rt_init, t1t2fatheta
-            )
-            recon_output_ec = (
-                recon_output_ec.to("cpu").detach().numpy()
-            )  # w/ eddy current
-            recon_output = model.decode(
-                latent_space_mu, t1t2fatheta0
-            )  # NO REPARAMETERIZATION
-            recon_output = recon_output.to("cpu").detach().numpy()
-            latent_space_mu = latent_space_mu.to("cpu").detach().numpy()
-
+            
+            recon_output_ec, latent_space_mu, latent_space_logvar = model(Phi_rt_init, t1t2fatheta)
+            recon_output_ec = recon_output_ec.to('cpu').detach().numpy() # w/ eddy current
+            recon_output = model.decode(latent_space_mu, t1t2fatheta0) #NO REPARAMETERIZATION
+            recon_output = recon_output.to('cpu').detach().numpy()
+            latent_space_mu = latent_space_mu.to('cpu').detach().numpy()
+            
             print(f"Model saved as model_{file_name}_kld_{kld_index}.pth")
             val_nrmse = evaluate_model(model, phi_val, conditional_val)
             train_nrmse_list.append(train_nrmse)
             val_nrmse_list.append(val_nrmse)
-
+            
             fig, axs = plt.subplots(1, 3, figsize=(30, 10))
             # fig3, axs3 = plt.subplots(3, 1, figsize=(10, 10))
             axs = axs.flatten()  # Flatten the 2x2 array of axes for easy indexing
             for i in range(3):
-                axs[i].plot(latent_space_mu[:3600, i], label=f"Latent vector {i+1}")
+                axs[i].plot(latent_space_mu[:3600, i], label=f'Latent vector {i+1}')
                 axs[i].legend(loc="upper right")
             # axs[3].plot(Segidx[:3600], label='Segidx')
             # axs[3].legend(loc="upper right")
@@ -451,51 +525,33 @@ for file_name in os.listdir(data_folder):
             # axs[4].legend(loc="upper right")
             # axs[5].plot(flipAngles[:3600], label='Flip Angles')
             # axs[5].legend(loc="upper right")
-            # plot title
-            plt.suptitle(f"KLD Index: {kld_index}")
+            #plot title
+            plt.suptitle(f'KLD Index: {kld_index}')
             plt.tight_layout()
-            fig.savefig(
-                os.path.join(plot_folder, f"{file_name}_{kld_index}_latent.png")
-            )
-
+            fig.savefig(os.path.join(plot_folder, f'{file_name}_{kld_index}_latent.png'))
+            
             print(f"Validation Accuracy: {val_nrmse}")
             if val_nrmse < best_nrmse:
                 best_nrmse = val_nrmse
                 best_kld_index = kld_index
                 # best_lr = lr_value
-                best_model = model
-
+                best_model = model      
+        
         # save train_nrmse_list and val_nrmse_list
-        torch.save(
-            train_nrmse_list,
-            os.path.join(model_folder, f"train_nrmse_list_{file_name}.pth"),
-        )
-        torch.save(
-            val_nrmse_list,
-            os.path.join(model_folder, f"val_nrmse_list_{file_name}.pth"),
-        )
+        torch.save(train_nrmse_list, os.path.join(model_folder, f'train_nrmse_list_{file_name}.pth'))
+        torch.save(val_nrmse_list, os.path.join(model_folder, f'val_nrmse_list_{file_name}.pth'))
         # Plot the NRMSE for different KLD indices
-
+        
         plt.figure(figsize=(8, 5))
-        plt.plot(
-            kld_indices,
-            train_nrmse_list.to("cpu").detach().numpy(),
-            marker="o",
-            label="Training NRMSE",
-        )
-        plt.plot(
-            kld_indices,
-            val_nrmse_list.to("cpu").detach().numpy(),
-            marker="o",
-            label="Validation NRMSE",
-        )
-        plt.xlabel("KLD Index")
-        plt.ylabel("NRMSE")
-        plt.title("NRMSE vs KLD Index")
+        plt.plot(kld_indices, train_nrmse_list.to("cpu").detach().numpy(), marker='o', label='Training NRMSE')
+        plt.plot(kld_indices, val_nrmse_list.to("cpu").detach().numpy(), marker='o', label='Validation NRMSE')
+        plt.xlabel('KLD Index')
+        plt.ylabel('NRMSE')
+        plt.title('NRMSE vs KLD Index')
         plt.legend()
         plt.grid(True)
         plt.show()
-        plt.savefig(os.path.join(plot_folder, f"{file_name}_kld_nrmse.png"))
+        plt.savefig(os.path.join(plot_folder, f'{file_name}_kld_nrmse.png'))
         # print(f"Best Model: {file_name} with KLD Index: {best_kld_index} ")
 
     ##### LOSS GRAPHS #####
@@ -538,7 +594,7 @@ for file_name in os.listdir(data_folder):
     #     axs2[i+4].legend(loc="upper right")
     # plt.tight_layout()
     # fig2.savefig(os.path.join(plot_folder, f'{file_name}_recon_output.png'))
-
+   
     # latent vectors
     # fig3, axs3 = plt.subplots(1, 3, figsize=(30, 10))
     # # fig3, axs3 = plt.subplots(3, 1, figsize=(10, 10))
@@ -554,8 +610,8 @@ for file_name in os.listdir(data_folder):
     # # axs3[5].legend(loc="upper right")
     # plt.tight_layout()
     # fig3.savefig(os.path.join(plot_folder, f'{file_name}_latent_vector.png'))
-
-    # fft of latent vectors
+    
+    #fft of latent vectors
     # fig4, axs4 = plt.subplots(3, 1, figsize=(10, 10))
     # u2_fft = np.fft.fft(latent_space_mu[:,1])
     # u2_freq = np.fft.fftfreq(len(latent_space_mu[:,1]), d=0.0534)

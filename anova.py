@@ -22,7 +22,7 @@ from statsmodels.formula.api import ols
 
 # Load Excel file
 # Load your data (replace with your actual path if needed)
-df = pd.read_excel("/home/xfang/Data/Multitasking_SMS/T1T2_mapvalues_wo.xlsx", sheet_name="Sheet1")
+df = pd.read_excel("/home/xfang/Data/Multitasking_SMS/T1T2_mapvalues.xlsx", sheet_name="Sheet1")
 
 
 df_run1 = df[df["RunID"] == "run1"]
@@ -30,7 +30,7 @@ df_run1 = df[df["RunID"] == "run1"]
 # List of variables to test
 metrics = ["T1_Mean_Septal", "T2_Mean_Septal", "t1_cov", "t2_cov"]
 
-# Run ANOVAs on run1 data
+# Run ANOVAs on run1 data
 for metric in metrics:
     print(f"\n--- ANOVA for {metric} (RunID = run1) ---")
     model = ols(f"{metric} ~ C(Subject) + C(Slice) + C(ReconMethod)", data=df_run1).fit()

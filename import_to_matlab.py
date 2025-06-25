@@ -10,7 +10,7 @@ import torch.utils
 import torch.distributions
 import torch.optim as optim
 from tqdm import tqdm
-from network import VAE, CVAE, CVAE_BP, CVAE_BP_HT
+from network import VAE, CVAE, CVAE_BP #, CVAE_BP_HT
 import torchvision
 import mat73
 import numpy as np
@@ -32,7 +32,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 path = os.path.dirname(os.path.realpath(__file__))
 
 # load data and conditional information
-data_file = "sms_data_test/Human_SMS_20210622_1_run2_ExtractToPython.mat"
+data_file = "/home/xfang/projects/CVAE_SMS/SMS_data/ExtractToPython_0618_2_run1.mat"
 mat_data = mat73.loadmat(data_file)
 mat_data = mat_data["ExtractToPython"]
 Phi_rt_init = mat_data["Phi_rt_small"]
@@ -83,8 +83,8 @@ Phi_rt_init_con = Phi_rt_init_con.transpose()
 Phi_rt_init = torch.from_numpy(Phi_rt_init_con).float().to(device)
 
 feature_size = Phi_rt_init.size()[1]
-model = CVAE_BP_HT(feature_size, latent_dims=2, class_size=4).to(device)
-model.load_state_dict(torch.load('SMS_models/model_Human_SMS_20210622_1_run2_ExtractToPython.pt'))
+model = CVAE_BP(feature_size, latent_dims=3, class_size=4).to(device)
+model.load_state_dict(torch.load('/home/xfang/projects/CVAE_SMS/SMS_models/model_ExtractToPython_0618_2_run1.pth'))
 
 recon_output_ec, latent_space_mu, latent_space_logvar = model(Phi_rt_init, t1t2fatheta)
 recon_output_ec = model.decode(latent_space_mu, t1t2fatheta).to("cpu").detach().numpy()
@@ -157,9 +157,10 @@ condition_fitting = conditional_interp.repeat(cbins*rbins,1).to(device)
 phi4fitting = model.decode(latent_space_mu_fitting,condition_fitting).to("cpu").detach().numpy()
 
 savemat(
-    "/home/xfang/Data/Multitasking_SMS/Human_SMS_20210622_1/2D_SMS_DATA/python_0622_1_run2.mat",
+    "/home/xfang/Data/Multitasking_SMS/Human_SMS_20210618_2/2D_SMS_DATA/python_0618_2_run1_ec.mat",
     {
         "realtime": recon_output,
+        "realtime_ec": recon_output_ec,
         "phi4fitting": phi4fitting,
         "latentspace": latent_space_mu,
         "endofdiastole": phase0,
