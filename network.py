@@ -223,7 +223,7 @@ class CVAE_BP(nn.Module):
         z_filtered = torch.fft.ifft(z_f, dim=-1).real[num_extend:-num_extend]
         return z_filtered
 
-    def low_pass_filter(self, z, upper_limit):  
+    def low_pass_filter(self, z, upper_limit):
         d = 0.00712  # sampling rate
         num_extend = torch.ceil(torch.tensor(1 / (2 * d * upper_limit))).int()
         extended_z = torch.cat(
@@ -239,7 +239,7 @@ class CVAE_BP(nn.Module):
         z_f = torch.where((abs(z_freq) <= upper_limit), z_fft, torch.zeros_like(z_fft))
         z_filtered = torch.fft.ifft(z_f, dim=-1).real[num_extend:-num_extend]
         return z_filtered
-    
+
     def encode(self, x, c):  # Q(z|x, c)
         """
         x: (bs, feature_size)
@@ -273,7 +273,7 @@ class CVAE_BP(nn.Module):
         z: (bs, latent_size)
         c: (bs, class_size)
         """
-        inputs = torch.cat([z, c], 1) # (bs, latent_size+class_size)
+        inputs = torch.cat([z, c], 1)  # (bs, latent_size+class_size)
         h6 = self.relu(self.fc6(inputs))
         h7 = self.relu(self.fc7(h6))
         h8 = self.relu(self.fc8(h7))
@@ -290,11 +290,16 @@ class CVAE_BP(nn.Module):
 
 
 class CVAE_BP_HT(nn.Module):
-    def __init__(self, feature_size, latent_dims, class_size, sampling_rate):
+    def __init__(
+        self, feature_size, latent_dims, class_size, sampling_rate, LPF, BPFlb, BPFub
+    ):
         super(CVAE_BP_HT, self).__init__()
         self.feature_size = feature_size
         self.class_size = class_size
         self.sampling_rate = sampling_rate
+        self.LPF = LPF
+        self.BPFlb = BPFlb
+        self.BPFub = BPFub
 
         # encode
         self.fc1 = nn.Linear(feature_size + class_size, 25)
@@ -341,6 +346,7 @@ class CVAE_BP_HT(nn.Module):
             torch.zeros_like(z_fft),
         )
         z_filtered = torch.fft.ifft(z_f, dim=-1).real[num_extend:-num_extend]
+        assert not torch.isnan(z_filtered).any(), "NaNs in band_pass_filter"
         return z_filtered
 
     # def low_pass_filter(self, z, upper_limit):
@@ -371,6 +377,7 @@ class CVAE_BP_HT(nn.Module):
         z_freq = torch.fft.fftfreq(len(extended_z), d=d, device=z.device)
         z_f = torch.where((abs(z_freq) <= upper_limit), z_fft, torch.zeros_like(z_fft))
         z_filtered = torch.fft.ifft(z_f, dim=-1).real[num_extend:-num_extend]
+        assert not torch.isnan(z_filtered).any(), "NaNs in low_pass_filter"
         return z_filtered
 
     def hilbert_transform(self, signal):
@@ -395,11 +402,13 @@ class CVAE_BP_HT(nn.Module):
         hilbert_transformed_signal = analytic_signal.imag
         return hilbert_transformed_signal
 
-    def encode(self, x, c, sampling_rate):  # Q(z|x, c)
+    def encode(self, x, c):  # Q(z|x, c)
         """
         x: (bs, feature_size)
         c: (bs, class_size)
         """
+        assert not torch.isnan(x).any(), "NaNs in input x"
+        assert not torch.isnan(c).any(), "NaNs in input c"
         inputs = torch.cat([x, c], 1)  # (bs, feature_size+class_size)
         h1 = self.relu(self.fc1(inputs))
         h2 = self.relu(self.fc2(h1))
@@ -409,14 +418,16 @@ class CVAE_BP_HT(nn.Module):
         z_var = self.fc52(h4)
         u1 = z_mu[:, 0]
         u2 = z_mu[:, 1]
-        u1_filtered = self.low_pass_filter(u1, 0.67, sampling_rate)
-        u2_filtered = self.band_pass_filter(u2, 0.67, 2.5, sampling_rate)
+        u1_filtered = self.low_pass_filter(u1, self.LPF, self.sampling_rate)
+        u2_filtered = self.band_pass_filter(
+            u2, self.BPFlb, self.BPFub, self.sampling_rate
+        )
         u3 = self.hilbert_transform(u2_filtered)
         z_mu = torch.stack((u1_filtered, u2_filtered, u3), dim=1)
         z_var = torch.stack(
             (z_var[:, 0], z_var[:, 1], z_var[:, 1]), dim=1
         )  # set the variance of the Hilbert transform to var2
-        return z_mu, z_var 
+        return z_mu, z_var
 
     def reparameterize(self, mu, logvar):
         std = torch.exp(0.5 * logvar)
@@ -436,9 +447,10 @@ class CVAE_BP_HT(nn.Module):
         return self.fc10(h9)
 
     def forward(self, x, c):
-        mu, logvar = self.encode(x, c)
+        mu, logvar = self.encode(x, c)"
         z = self.reparameterize(mu, logvar)
-        return self.decode(z, c), mu, logvar
+        recon = self.decode(z, c)
+        return recon, mu, logvar
 
 
 class DAE(nn.Module):
@@ -505,5 +517,3 @@ class DAE(nn.Module):
         mu, logvar = self.encode(x, c)
         z = self.reparameterize(mu, logvar)
         return self.decode(z, c), mu, logvar
-    
-

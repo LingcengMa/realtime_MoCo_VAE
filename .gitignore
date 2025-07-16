@@ -4,6 +4,7 @@ mutualinfo
 *.jpg
 *.jpeg
 *.png
+*.eps
 *.tfevents.*
 
 # Byte-compiled / optimized / DLL files
