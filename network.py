@@ -447,7 +447,7 @@ class CVAE_BP_HT(nn.Module):
         return self.fc10(h9)
 
     def forward(self, x, c):
-        mu, logvar = self.encode(x, c)"
+        mu, logvar = self.encode(x, c)
         z = self.reparameterize(mu, logvar)
         recon = self.decode(z, c)
         return recon, mu, logvar
