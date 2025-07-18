@@ -3,14 +3,20 @@
 
 ## Installation
 
-1. **Clone the repository**
+1. **Clone the python repository**
    ```bash
    git clone -b MATLABintegration --single-branch https://redlradadm05403.ad.medctr.ucla.edu:3000/xfang/vae_temporal_analysis.git
-   on MATLABintegration branch
    ```
-2. **Set up a virtual environment** (optional/i didn't use a virtual env nor didn't i know how to set it up but i heard it's useful)
 
-3. **Install dependencies**
+2. ## Clone the matlab repository**
+   ```bash
+   git clone https://redlradadm05403.ad.medctr.ucla.edu:3000/xfang/generativeMT.git
+   reconstruction code is in `multitasking_recon_Generative.m`
+   ```
+
+3. **Set up a virtual environment** (optional/i didn't use a virtual env but it might be useful)
+
+4. **Install dependencies**
    ```bash
    pip3 install -r requirements.txt
    ```
@@ -66,6 +72,6 @@ by inference_network.py
    1. multidimentional temporal basis phi: `Phi_gen`
 
 
-## Troubleshooting
+## Parameter tuning
 
 - **HIGH NRMSE**: change KLD index, initialization manual seed, learning rate. 
