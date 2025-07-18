@@ -5,8 +5,8 @@
 
 1. **Clone the repository**
    ```bash
-   git clone -b MATLABintergration --single-branch https://redlradadm05403.ad.medctr.ucla.edu:3000/xfang/vae_temporal_analysis.git
-   on MATLABintergration branch
+   git clone -b MATLABintegration --single-branch https://redlradadm05403.ad.medctr.ucla.edu:3000/xfang/vae_temporal_analysis.git
+   on MATLABintegration branch
    ```
 2. **Set up a virtual environment** (optional/i didn't use a virtual env nor didn't i know how to set it up but i heard it's useful)
 
