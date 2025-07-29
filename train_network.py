@@ -71,9 +71,7 @@ def train(mat_path):
     ExtractToPython = data["ExtractToPython"]
 
     # Extract variables (examples below, adapt as needed)
-    Phi_rt_init = (
-        torch.from_numpy(ExtractToPython.Phi_rt_init.transpose()).float().to(device)
-    )
+    Phi_rt_com = torch.from_numpy(ExtractToPython.Phi_rt_com).float().to(device)
     TrainingCondition = (
         torch.from_numpy(ExtractToPython.TrainingCondition).float().to(device)
     )
@@ -89,12 +87,12 @@ def train(mat_path):
     BPFlb = ExtractToPython.BPFlb
     BPFub = ExtractToPython.BPFub
     sampling_rate = ExtractToPython.sampling_rate
-    feature_size = Phi_rt_init.size()[1]
+    feature_size = Phi_rt_com.size()[1]
     latent_dim = ExtractToPython.NumofLatent
     seed = ExtractToPython.seed
 
     print("Training setup:")
-    print(f"  Phi_rt_init shape: {Phi_rt_init.shape}")
+    print(f"  Phi_rt_com shape: {Phi_rt_com.shape}")
     print(f"  TrainingCondition shape: {TrainingCondition.shape}")
     print(f"  Learning Rate: {lr}, Epochs: {NumofEpochs}")
     print(f"  Class Size: {class_size}, KLD Index: {KLD_index}")
@@ -113,20 +111,20 @@ def train(mat_path):
 
     losses = []
     NRMSE = []
-    total = (Phi_rt_init**2).sum()
+    total = (Phi_rt_com**2).sum()
     pbar = tqdm(total=NumofEpochs, desc="Initializing")
     for epoch in range(NumofEpochs):
-        recon_x, mu, logvar = model(Phi_rt_init, TrainingCondition)
+        recon_x, mu, logvar = model(Phi_rt_com, TrainingCondition)
         optimizer.zero_grad()
-        loss = loss_function_KLD(recon_x, Phi_rt_init, mu, logvar, KLD_index)
+        loss = loss_function_KLD(recon_x, Phi_rt_com, mu, logvar, KLD_index)
         loss.backward()
         optimizer.step()
         if (epoch % epoch_plot_step) == (epoch_plot_step - 1):
-            train_loss = loss.detach().cpu().numpy() / Phi_rt_init.shape[0]
+            train_loss = loss.detach().cpu().numpy() / Phi_rt_com.shape[0]
             losses.append(train_loss)
-            mu, logvar = model.encode(Phi_rt_init, TrainingCondition)
+            mu, logvar = model.encode(Phi_rt_com, TrainingCondition)
             recon_x = model.decode(mu, TrainingCondition)  # NO REPARAMETERIZATION
-            mse = ((recon_x - Phi_rt_init) ** 2).sum()
+            mse = ((recon_x - Phi_rt_com) ** 2).sum()
             nrmse_ = torch.sqrt(mse / total)
             NRMSE.append(nrmse_.detach().cpu().numpy())
             pbar.set_description(f"train_loss: {train_loss:.3e}, NRMSE: {nrmse_:.4f}")

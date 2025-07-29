@@ -30,14 +30,12 @@ def inference(mat_path, model_path, inference_path):
 
     ExtractToPython = data["ExtractToPython"]
     # Extract variables (examples below, adapt as needed)
-    Phi_rt_init = (
-        torch.from_numpy(ExtractToPython.Phi_rt_init.transpose()).float().to(device)
-    )
+    Phi_rt_com = torch.from_numpy(ExtractToPython.Phi_rt_com).float().to(device)
     motion_vector = torch.from_numpy(inference["motion_vector"]).float().to(device)
     md_inference_condition = (
         torch.from_numpy(inference["md_inference_condition"]).float().to(device)
     )
-    feature_size = Phi_rt_init.size()[1]
+    feature_size = Phi_rt_com.size()[1]
     latent_dim = ExtractToPython.NumofLatent
     class_size = ExtractToPython.NumofCon
     sampling_rate = ExtractToPython.sampling_rate
