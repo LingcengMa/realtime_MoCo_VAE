@@ -99,6 +99,7 @@ def train(mat_path):
     print(
         f"  LPF: {LPF}, BPFlb: {BPFlb}, BPFub: {BPFub}, Sampling Rate: {sampling_rate}"
     )
+    print(f"  Feature Size: {feature_size}, Latent Dim: {latent_dim}, Seed: {seed}")
 
     model = CVAE_BP_HT(
         feature_size, latent_dim, class_size, sampling_rate, LPF, BPFlb, BPFub
@@ -138,19 +139,31 @@ def train(mat_path):
     model_save_path = save_path.parent / "cvae_model.pth"
     torch.save(model.state_dict(), model_save_path)
 
+    reset_weights(model, seed)  # Reset weights before inference
+
+    model.load_state_dict(torch.load(model_save_path))
+
+    with torch.no_grad():
+        mu, logvar = model.encode(Phi_rt_com, TrainingCondition)
+        recon_x = model.decode(mu, TrainingCondition)
+
     latent_space = model.reparameterize(mu, logvar)
     latent_space = latent_space.to("cpu").detach().numpy()
+    recon_wo_eddy_current = model.decode(mu, InferenceCondition)
 
-    recon_eddy_current = recon_x.to("cpu").detach().numpy()
-    recon_wo_eddy_current = (
-        model.decode(mu, InferenceCondition).to("cpu").detach().numpy()
+    recon_w_eddy_current = recon_x.to("cpu").detach().numpy()
+    recon_wo_eddy_current = recon_wo_eddy_current.to("cpu").detach().numpy()
+
+    return (
+        str(model_save_path),
+        latent_space,
+        recon_w_eddy_current,
+        recon_wo_eddy_current,
     )
-
-    return str(model_save_path), latent_space, recon_eddy_current, recon_wo_eddy_current
 
 
 # Run the training function
-model_path, latent_space, recon_eddy_current, recon_wo_eddy_current = train(input_mat)
+model_path, latent_space, recon_w_eddy_current, recon_wo_eddy_current = train(input_mat)
 
 # Save results back to MATLAB
 scipy.io.savemat(
@@ -158,7 +171,7 @@ scipy.io.savemat(
     {
         "latent_space": latent_space,
         "model_path": model_path,
-        "recon_eddy_current": recon_eddy_current,
+        "recon_w_eddy_current": recon_w_eddy_current,
         "recon_wo_eddy_current": recon_wo_eddy_current,
     },
 )
