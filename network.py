@@ -302,19 +302,19 @@ class CVAE_BP_HT(nn.Module):
         self.BPFub = BPFub
 
         # encode
-        self.fc1 = nn.Linear(feature_size + class_size, 25)
-        self.fc2 = nn.Linear(25, 50)
-        self.fc3 = nn.Linear(50, 100)
-        self.fc4 = nn.Linear(100, 70)
-        self.fc51 = nn.Linear(70, latent_dims)
-        self.fc52 = nn.Linear(70, latent_dims)
+        self.fc1 = nn.Linear(feature_size + class_size, 75)
+        self.fc2 = nn.Linear(75, 50)
+        self.fc3 = nn.Linear(50, 25)
+        self.fc4 = nn.Linear(25, 10)
+        self.fc51 = nn.Linear(10, latent_dims)
+        self.fc52 = nn.Linear(10, latent_dims)
 
         # decode
-        self.fc6 = nn.Linear(latent_dims + class_size + 1, 70)
-        self.fc7 = nn.Linear(70, 100)
-        self.fc8 = nn.Linear(100, 50)
-        self.fc9 = nn.Linear(50, 25)
-        self.fc10 = nn.Linear(25, feature_size)
+        self.fc6 = nn.Linear(latent_dims + class_size + 1, 10)
+        self.fc7 = nn.Linear(10, 25)
+        self.fc8 = nn.Linear(25, 50)
+        self.fc9 = nn.Linear(50, 75)
+        self.fc10 = nn.Linear(75, feature_size)
 
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()

@@ -163,7 +163,6 @@ def train(mat_path):
         mu, logvar = model.encode(Phi_rt_small, TrainingCondition)
         recon_x = model.decode(mu, TrainingCondition)
 
-    latent_space = model.reparameterize(mu, logvar)
     latent_space = mu.to("cpu").detach().numpy()
     recon_ec = model.decode(mu, InferenceCondition)
 
