@@ -1,5 +1,8 @@
 import sys
 import torch
+import numpy as np
+import mat73
+import os
 
 # torch.manual_seed(0)
 import torch.utils
@@ -23,25 +26,33 @@ recon_output_path = sys.argv[4]
 
 def inference(mat_path, model_path, inference_path):
     # Load the .mat file (saved with -v7.3 in MATLAB)
-    data = scipy.io.loadmat(mat_path, struct_as_record=False, squeeze_me=True)
-    inference = scipy.io.loadmat(
-        inference_path, struct_as_record=False, squeeze_me=True
-    )
+    data = mat73.loadmat(mat_path)
+    inference = mat73.loadmat(inference_path)
 
     ExtractToPython = data["ExtractToPython"]
     # Extract variables (examples below, adapt as needed)
-    Phi_rt_com = torch.from_numpy(ExtractToPython.Phi_rt_com).float().to(device)
+
+    Phi_rt_small = ExtractToPython["Phi_rt_small"]
+    Phi_rt_small = Phi_rt_small / Phi_rt_small[:, 0].std()  # Normalize whole
+    # Phi_rt_small = (Phi_rt_small - Phi_rt_small.mean(axis=1, keepdims=True)) / Phi_rt_small.std(axis=1, keepdims=True) #Normalize each feature
+    Phi_rt_small_real = Phi_rt_small.real
+    Phi_rt_small_imag = Phi_rt_small.imag
+    Phi_rt_small_con = np.concatenate((Phi_rt_small_real, Phi_rt_small_imag))
+    Phi_rt_small_con = Phi_rt_small_con.transpose()
+    Phi_rt_small = torch.from_numpy(Phi_rt_small_con).float().to(device)
+    feature_size = Phi_rt_small.shape[1]
+
     motion_vector = torch.from_numpy(inference["motion_vector"]).float().to(device)
     md_inference_condition = (
         torch.from_numpy(inference["md_inference_condition"]).float().to(device)
     )
-    feature_size = Phi_rt_com.size()[1]
-    latent_dim = ExtractToPython.NumofLatent
-    class_size = ExtractToPython.NumofCon
-    sampling_rate = ExtractToPython.sampling_rate
-    LPF = ExtractToPython.LPF
-    BPFlb = ExtractToPython.BPFlb
-    BPFub = ExtractToPython.BPFub
+
+    class_size = int(ExtractToPython["NumofCon"])
+    LPF = float(ExtractToPython["LPF"])
+    BPFlb = float(ExtractToPython["BPFlb"])
+    BPFub = float(ExtractToPython["BPFub"])
+    sampling_rate = float(ExtractToPython["sampling_rate"])
+    latent_dim = int(ExtractToPython["NumofLatent"])
 
     model = CVAE_BP_HT(
         feature_size, latent_dim, class_size, sampling_rate, LPF, BPFlb, BPFub
