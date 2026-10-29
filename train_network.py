@@ -25,11 +25,19 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 input_mat = sys.argv[1]
 output_mat = sys.argv[2]
 
-# input_mat = "/mnt/local_raid/xfang/Multitasking_SMS/Human_SMS_20210618_1/2D_SMS_DATA/meas_MID00063_FID30062_2D_Multitasking_Multiband_2FA_HYPT2Prep+IR_run1_20250910T112636/ExtractToPython.mat"
-# output_mat = "/mnt/local_raid/xfang/Multitasking_SMS/Human_SMS_20210618_1/2D_SMS_DATA/meas_MID00063_FID30062_2D_Multitasking_Multiband_2FA_HYPT2Prep+IR_run1_20250910T112636/Output.mat"
+# input_mat = "/mnt/local_raid/xfang/CINE/VA_09112026/meas_MID00509_FID56252_BEAT_MT_dualFA_T1_T2_2D_20261013T162541/ExtractToPython.mat"
+# output_mat = "/mnt/local_raid/xfang/CINE/VA_09112026/meas_MID00509_FID56252_BEAT_MT_dualFA_T1_T2_2D_20261013T162541/OutputFromPython.mat"
 
 
-# Define the loss function for the``                                         CVAE
+# Optional command-line paths override the configured defaults.
+if len(sys.argv) > 1:
+    input_mat = sys.argv[1]
+if len(sys.argv) > 2:
+    output_mat = sys.argv[2]
+Path(output_mat).parent.mkdir(parents=True, exist_ok=True)
+
+
+# Define the loss function for the CVAE
 # The loss function combines reconstruction loss and KL divergence
 # The reconstruction loss is typically MSE or binary cross-entropy
 def loss_function(recon_x, x, mu, logvar):
@@ -70,6 +78,37 @@ def reset_weights(m, seed):
 #             m.bias.data.fill_(0.01)
 
 
+class RisingLossStopper:
+    """Detect sustained degradation using non-overlapping mean-loss windows."""
+
+    def __init__(self, window_size=100, patience=3, relative_tolerance=0.01):
+        self.window_size = window_size
+        self.patience = patience
+        self.relative_tolerance = relative_tolerance
+        self.window_losses = []
+        self.best_loss = float("inf")
+        self.bad_windows = 0
+
+    def update(self, loss):
+        self.window_losses.append(loss)
+        if len(self.window_losses) < self.window_size:
+            return False, False
+        mean_loss = sum(self.window_losses) / len(self.window_losses)
+        self.window_losses.clear()
+        improved = mean_loss < self.best_loss
+        if improved:
+            self.best_loss = mean_loss
+            self.bad_windows = 0
+        elif (
+            mean_loss
+            > self.best_loss + max(abs(self.best_loss), 1e-12) * self.relative_tolerance
+        ):
+            self.bad_windows += 1
+        else:
+            self.bad_windows = 0
+        return improved, self.bad_windows >= self.patience
+
+
 ### training functions ###
 
 
@@ -100,6 +139,11 @@ def train(mat_path):
         torch.from_numpy(ExtractToPython["InferenceCondition"]).float().to(device)
     )
 
+    if TrainingCondition.dim() == 1:
+        TrainingCondition = TrainingCondition.reshape(-1, 1)
+    if InferenceCondition.dim() == 1:
+        InferenceCondition = InferenceCondition.reshape(-1, 1)
+
     lr = float(ExtractToPython["lr"])
     NumofEpochs = int(ExtractToPython["NumofEpochs"])
     class_size = int(ExtractToPython["NumofCon"])
@@ -124,15 +168,25 @@ def train(mat_path):
     model = CVAE_BP_HT(
         feature_size, latent_dim, class_size, sampling_rate, LPF, BPFlb, BPFub
     ).to(device)
+    structure = str(model)
+    parameter_count = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"Network structure:\n{structure}\nTrainable parameters: {parameter_count:,}")
+    (Path(output_mat).parent / "network_structure.txt").write_text(
+        f"{structure}\nTrainable parameters: {parameter_count:,}\n"
+    )
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
-    # reset_weights(model, seed)  # Initialize weights with seed
+    reset_weights(model, seed)  # Initialize weights with seed
 
-    epoch_plot_step = 1000  # Plot every 1000 epochs
+    epoch_plot_step = 10  # Plot every 10 epochs
 
+    stopper = RisingLossStopper(window_size=100, patience=3, relative_tolerance=0.01)
+    best_state = None
+    best_epoch = None
     losses = []
     NRMSE = []
     total = (Phi_rt_small**2).sum()
+    should_stop = False
     pbar = tqdm(total=NumofEpochs, desc="Initializing")
     for epoch in range(NumofEpochs):
         recon_x, mu, logvar = model(Phi_rt_small, TrainingCondition)
@@ -140,7 +194,16 @@ def train(mat_path):
         loss = loss_function_KLD(recon_x, Phi_rt_small, mu, logvar, KLD_index)
         loss.backward()
         optimizer.step()
-        if (epoch % epoch_plot_step) == (epoch_plot_step - 1):
+        improved, should_stop = stopper.update(loss.detach().item())
+        if improved:
+            best_state = {
+                name: value.detach().cpu().clone()
+                for name, value in model.state_dict().items()
+            }
+            best_epoch = epoch + 1
+        if (epoch % epoch_plot_step) == (
+            epoch_plot_step - 1
+        ) or epoch == NumofEpochs - 1:
             train_loss = loss.detach().cpu().numpy() / Phi_rt_small.shape[0]
             losses.append(train_loss)
             mu, logvar = model.encode(Phi_rt_small, TrainingCondition)
@@ -149,21 +212,52 @@ def train(mat_path):
             nrmse_ = torch.sqrt(mse / total)
             NRMSE.append(nrmse_.detach().cpu().numpy())
             pbar.set_description(f"train_loss: {train_loss:.3e}, NRMSE: {nrmse_:.4f}")
-            pbar.update(epoch_plot_step)
+            pbar.update(epoch + 1 - pbar.n)
+        if should_stop:
+            pbar.write(
+                f"Early stopping at epoch {epoch + 1}: average loss exceeded "
+                "the best by more than 1% for 3 consecutive 100-epoch windows."
+            )
+            model.load_state_dict(best_state)
+            pbar.write(f"Restored model from epoch {best_epoch}.")
+            break
     pbar.close()
 
     print("Training completed.")
-    print(f"Final training loss: {losses[-1]:.3e}, NRMSE: {NRMSE[-1]:.4f}")
+    if losses:
+        print(f"Last observed training loss: {losses[-1]:.3e}, NRMSE: {NRMSE[-1]:.4f}")
+    if should_stop:
+        with torch.no_grad():
+            mu, logvar = model.encode(Phi_rt_small, TrainingCondition)
+            recon_x = model.decode(mu, TrainingCondition)
+            restored_nrmse = torch.sqrt(((recon_x - Phi_rt_small) ** 2).sum() / total)
+        print(f"Restored model NRMSE: {restored_nrmse.item():.4f}")
     # Save the model
-    save_path = Path(mat_path)  # ← convert str to Path
-    model_save_path = save_path.parent / "cvae_model.pth"
+    model_save_path = Path(output_mat).parent / "cvae_model.pth"
     torch.save(model.state_dict(), model_save_path)
 
     with torch.no_grad():
         mu, logvar = model.encode(Phi_rt_small, TrainingCondition)
         recon_x = model.decode(mu, TrainingCondition)
 
-    latent_space = mu.to("cpu").detach().numpy()
+    latent_space_mu = mu.to("cpu").detach().numpy()
+    latent_space_logvar = logvar.to("cpu").detach().numpy()
+
+    # Plot posterior means, the motion vectors used for deterministic inference.
+    time_seconds = np.arange(latent_space_mu.shape[0]) * sampling_rate
+    labels = ["Respiratory", "Cardiac", "Cardiac Hilbert transform"]
+    fig, axes = plt.subplots(latent_space_mu.shape[1], 1, figsize=(14, 8), sharex=True)
+    for index, ax in enumerate(np.atleast_1d(axes)):
+        ax.plot(time_seconds, latent_space_mu[:, index], linewidth=0.7)
+        ax.set_ylabel(f"Latent {index + 1}")
+        ax.set_title(labels[index] if index < len(labels) else f"Latent {index + 1}")
+        ax.grid(alpha=0.25)
+    np.atleast_1d(axes)[-1].set_xlabel("Time (s)")
+    fig.tight_layout()
+    plot_path = Path(output_mat).parent / "latent_vectors.png"
+    fig.savefig(plot_path, dpi=200)
+    plt.close(fig)
+    print(f"Latent vector plot saved to: {plot_path}")
     recon_ec = model.decode(mu, InferenceCondition)
 
     recon_x = recon_x.to("cpu").detach().numpy()
@@ -171,7 +265,8 @@ def train(mat_path):
 
     return (
         str(model_save_path),
-        latent_space,
+        latent_space_mu,
+        latent_space_logvar,
         recon_x,
         recon_ec,
         TrainingCondition.to("cpu").detach().numpy(),
@@ -180,15 +275,22 @@ def train(mat_path):
 
 
 # Run the training function
-model_path, latent_space, recon_x, recon_ec, TrainingCondition, InferenceCondition = (
-    train(input_mat)
-)
-
+(
+    model_path,
+    latent_space_mu,
+    latent_space_logvar,
+    recon_x,
+    recon_ec,
+    TrainingCondition,
+    InferenceCondition,
+) = train(input_mat)
 # Save results back to MATLAB
+
 scipy.io.savemat(
     output_mat,
     {
-        "latent_space": latent_space,
+        "latent_space_mu": latent_space_mu,
+        "latent_space_logvar": latent_space_logvar,
         "model_path": model_path,
         "recon_x": recon_x,
         "recon_ec": recon_ec,
@@ -256,4 +358,27 @@ scipy.io.savemat(
 # plt.legend()
 # plt.tight_layout()
 # plt.savefig("fft_recon_output_ec_with_theta.png")
+# plt.show()
+
+# # --- Plot 3: Latent Space ---
+# plt.figure(figsize=(6, 6))
+# plt.subplot(3, 1, 1)
+# plt.plot(latent_space[:, 0])
+# plt.title("Latent Space Dimension 1")
+# plt.xlabel("Sample Index")
+# plt.ylabel("Value")
+# plt.grid(True)  # Add grid for better readability
+# plt.subplot(3, 1, 2)
+# plt.plot(latent_space[:, 1])
+# plt.title("Latent Space Dimension 2")
+# plt.xlabel("Sample Index")
+# plt.ylabel("Value")
+# plt.grid(True)  # Add grid for better readability
+# plt.subplot(3, 1, 3)
+# plt.plot(latent_space[:, 2])
+# plt.title("Latent Space Dimension 3")
+# plt.xlabel("Sample Index")
+# plt.ylabel("Value")
+# plt.grid(True)  # Add grid for better readability
+# plt.tight_layout()
 # plt.show()

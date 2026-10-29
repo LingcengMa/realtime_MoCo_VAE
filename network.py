@@ -202,8 +202,8 @@ class CVAE_BP(nn.Module):
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
 
-    def band_pass_filter(self, z, lower_limit, upper_limit):
-        d = 0.00712  # sampling rate
+    def band_pass_filter(self, z, lower_limit, upper_limit, sampling_rate):
+        d = sampling_rate  # sampling rate
         num_extend = torch.ceil(torch.tensor(1 / (2 * d * upper_limit))).int()
         extended_z = torch.cat(
             [
@@ -221,10 +221,14 @@ class CVAE_BP(nn.Module):
             torch.zeros_like(z_fft),
         )
         z_filtered = torch.fft.ifft(z_f, dim=-1).real[num_extend:-num_extend]
+        assert not torch.isnan(z_filtered).any(), "NaNs in band_pass_filter"
         return z_filtered
 
-    def low_pass_filter(self, z, upper_limit):
-        d = 0.00712  # sampling rate
+    def low_pass_filter(self, z, upper_limit, sampling_rate):  # extend the input
+        # Keep only the latent variables within the specified frequency band
+        # extend the input at the beginning and end
+        # extend by X = ceil(1/(2*d*upper_limit))
+        d = sampling_rate  # sampling rate
         num_extend = torch.ceil(torch.tensor(1 / (2 * d * upper_limit))).int()
         extended_z = torch.cat(
             [
@@ -238,7 +242,47 @@ class CVAE_BP(nn.Module):
         z_freq = torch.fft.fftfreq(len(extended_z), d=d, device=z.device)
         z_f = torch.where((abs(z_freq) <= upper_limit), z_fft, torch.zeros_like(z_fft))
         z_filtered = torch.fft.ifft(z_f, dim=-1).real[num_extend:-num_extend]
+        assert not torch.isnan(z_filtered).any(), "NaNs in low_pass_filter"
         return z_filtered
+
+
+    # def band_pass_filter(self, z, lower_limit, upper_limit):
+    #     d = 0.00712  # sampling rate
+    #     num_extend = torch.ceil(torch.tensor(1 / (2 * d * upper_limit))).int()
+    #     extended_z = torch.cat(
+    #         [
+    #             torch.full((num_extend,), z[0].item(), device=z.device),
+    #             z,
+    #             torch.full((num_extend,), z[-1].item(), device=z.device),
+    #         ],
+    #         dim=0,
+    #     )
+    #     z_fft = torch.fft.fft(extended_z, dim=-1)
+    #     z_freq = torch.fft.fftfreq(len(extended_z), d=d, device=z.device)
+    #     z_f = torch.where(
+    #         (abs(z_freq) >= lower_limit) & (abs(z_freq) <= upper_limit),
+    #         z_fft,
+    #         torch.zeros_like(z_fft),
+    #     )
+    #     z_filtered = torch.fft.ifft(z_f, dim=-1).real[num_extend:-num_extend]
+    #     return z_filtered
+    # 
+    # def low_pass_filter(self, z, upper_limit):
+    #     d = 0.00712  # sampling rate
+    #     num_extend = torch.ceil(torch.tensor(1 / (2 * d * upper_limit))).int()
+    #     extended_z = torch.cat(
+    #         [
+    #             torch.full((num_extend,), z[0].item(), device=z.device),
+    #             z,
+    #             torch.full((num_extend,), z[-1].item(), device=z.device),
+    #         ],
+    #         dim=0,
+    #     )
+    #     z_fft = torch.fft.fft(extended_z, dim=-1)
+    #     z_freq = torch.fft.fftfreq(len(extended_z), d=d, device=z.device)
+    #     z_f = torch.where((abs(z_freq) <= upper_limit), z_fft, torch.zeros_like(z_fft))
+    #     z_filtered = torch.fft.ifft(z_f, dim=-1).real[num_extend:-num_extend]
+    #     return z_filtered
 
     def encode(self, x, c):  # Q(z|x, c)
         """
